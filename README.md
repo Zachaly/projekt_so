@@ -40,3 +40,6 @@ Napisz programy symulujące działanie kapitana portu, kapitana promu i pasażer
 # Repozytorium
 
 https://github.com/Zachaly/projekt_so
+
+# Uruchomienie
+Skrypt `compile.sh` służy do kompilacji wszystkich potrzebnych programów, należy uważać z otwieraniem i zapisywaniem tego pliku na Windowsach, nadpisze to końce linii, przez co nazwy plików wynikowych zostaną zniekształcone
