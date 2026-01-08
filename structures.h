@@ -1,8 +1,9 @@
-#define FEMALE 0
-#define MALE 1
+#define FEMALE 1
+#define MALE 2
 
 struct passenger {
-    short gender;
+    long int mtype; // also stands for gender
     int baggage;
     int wait_limit;
+    int pid;
 };

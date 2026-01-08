@@ -9,49 +9,47 @@
 #include <unistd.h>
 #include <signal.h>
 #include <time.h>
+#include <sys/msg.h>
 
 #define LOG_ENV "CURRENT_RUN_LOG"
+#define IPC_ENV "IPC_ID"
+#define SEM_ENV "SEM_ID"
+#define SEM_IPC 1
+#define SEM_LOG 2
 
-void sem_p(int sem_id, int sem_num, int op, int flag)
+int semId;
+
+void load_sem_id()
 {
+    semId = atoi(getenv(SEM_ENV));
+}
+
+void sem_p(int sem_id, int sem_num) {
     struct sembuf buf;
     buf.sem_num = sem_num;
-    buf.sem_op = op;
-    buf.sem_flg = flag;
+    buf.sem_op = -1;
+    buf.sem_flg = 0;
 
-    if (semop(sem_id, &buf, 1) == -1)
-    {
-        if (errno == EINTR)
-        {
-            sem_p(sem_id, sem_num, op, flag);
+    if (semop(sem_id, &buf, 1) == -1) {
+        if (errno == EINTR) {
+            sem_p(sem_id, sem_num);
         }
-        else
-        {
+        else {
             perror("Blad opuszczania semafora!");
-            exit(EXIT_FAILURE);
+            exit(-1);
         }
-    }
-    else
-    {
-        printf("Semafor zostal zamkniety. \n");
     }
 }
 
-void sem_v(int sem_id, int sem_num, int op, int flag)
-{
+void sem_v(int sem_id, int sem_num) {
     struct sembuf buf;
     buf.sem_num = sem_num;
-    buf.sem_op = op;
-    buf.sem_flg = flag;
+    buf.sem_op = 1;
+    buf.sem_flg = 0;
 
-    if (semop(sem_id, &buf, 1) == -1)
-    {
+    if (semop(sem_id, &buf, 1) == -1) {
         perror("Blad podnoszenia semafora!");
-        exit(EXIT_FAILURE);
-    }
-    else
-    {
-        printf("Semafor zostal otwarty\n");
+        exit(-1);
     }
 }
 
@@ -59,11 +57,13 @@ void log_info(char *source, char *text)
 {
     char *file_name = getenv(LOG_ENV);
 
+    sem_p(semId, SEM_LOG);
+
     FILE *file = fopen(file_name, "a");
 
     if (!file)
     {
-        perror("Nie można otworzyć pliku");
+        perror("Cannot open log file");
         exit(-1);
     }
 
@@ -75,6 +75,37 @@ void log_info(char *source, char *text)
     strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", local_time);
 
     fprintf(file, "[%s][%s](%d): %s\n", buffer, source, getpid(), text);
+    fclose(file);
 
     printf("[%s][%s](%d): %s\n", buffer, source, getpid(), text);
+
+    sem_v(semId, SEM_LOG);
+}
+
+void log_error(char *source, char *text)
+{
+    char *file_name = getenv(LOG_ENV);
+
+    sem_p(semId, SEM_LOG);
+
+    FILE *file = fopen(file_name, "a");
+
+    if (!file)
+    {
+        perror("Cannot open log file");
+        exit(-1);
+    }
+
+    time_t now = time(NULL);
+    struct tm *local_time = localtime(&now);
+
+    char buffer[100];
+
+    strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", local_time);
+
+    fprintf(file, "[%s][%s](%d): %s\n", buffer, source, getpid(), text);
+    fclose(file);
+    perror(text);
+
+    sem_v(semId, SEM_LOG);
 }
