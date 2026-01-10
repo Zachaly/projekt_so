@@ -2,9 +2,7 @@
 #include "structures.h"
 #include <pthread.h>
 #include <stdbool.h>
-#include <semaphore.h>
-
-#define MAX_LUGGAGE 20
+#include "errno.h"
 
 int current_gender = 0;
 int ipcId;
@@ -12,11 +10,13 @@ int stop = false;
 pthread_mutex_t mutex_passenger_num;
 pthread_mutex_t mutex_gender;
 int passenger_num = 0;
-
-sem_t thread_sem;
+int ipc_waiting_room;
+int *max_luggage;
 
 void *take_passenger()
 {
+    sem_p(semId, SEM_FERRY_CAP);
+
     struct passenger passenger;
 
     pthread_mutex_lock(&mutex_gender);
@@ -29,8 +29,8 @@ void *take_passenger()
         pthread_mutex_lock(&mutex_passenger_num);
         passenger_num--;
         pthread_mutex_unlock(&mutex_passenger_num);
-        log_info("GATE", "No passengers left");
-        stop = true;
+        sem_v(semId, SEM_FERRY_CAP);
+        pthread_mutex_unlock(&mutex_gender);
         pthread_exit(0);
         return NULL;
     }
@@ -39,18 +39,21 @@ void *take_passenger()
         pthread_mutex_lock(&mutex_passenger_num);
         passenger_num--;
         pthread_mutex_unlock(&mutex_passenger_num);
+        sem_v(semId, SEM_FERRY_CAP);
 
+        current_gender = 0;
+        pthread_mutex_unlock(&mutex_gender);
         pthread_exit(0);
         return NULL;
     }
-
-    if (result < 0)
+    else if (result < 0)
     {
         pthread_mutex_lock(&mutex_passenger_num);
         passenger_num--;
         pthread_mutex_unlock(&mutex_passenger_num);
+        pthread_mutex_unlock(&mutex_gender);
+        sem_v(semId, SEM_FERRY_CAP);
         log_error("GATE", "IPC error");
-        stop = true;
         pthread_exit(0);
         return NULL;
     }
@@ -66,11 +69,33 @@ void *take_passenger()
 
     sleep(5);
 
-    sprintf(log_buff, "Passenger(%d) left the gate", passenger.pid);
-    log_info("GATE", log_buff);
-
     pthread_mutex_lock(&mutex_passenger_num);
+    sem_p(semId, SEM_MAX_LUGGAGE_SHM);
+
+    if (passenger.baggage > *max_luggage)
+    {
+        sprintf(log_buff, "Passenger %d exceeded max baggage %d/%d", passenger.pid, passenger.baggage, *max_luggage);
+        log_info("GATE", log_buff);
+        kill(passenger.pid, SIGTERM);
+        sem_v(semId, SEM_FERRY_CAP);
+    }
+    else
+    {
+        sprintf(log_buff, "Passenger %d left the gate", passenger.pid);
+
+        log_info("GATE", log_buff);
+        sem_p(semId, SEM_IPC2);
+        if (msgsnd(ipc_waiting_room, &passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
+        {
+            log_error("GATE", "Failure while writing to ipc");
+            exit(-1);
+        }
+        sem_v(semId, SEM_IPC2);
+    }
+    sem_v(semId, SEM_MAX_LUGGAGE_SHM);
+
     passenger_num--;
+
     pthread_mutex_unlock(&mutex_passenger_num);
 
     pthread_exit(0);
@@ -81,16 +106,14 @@ int main()
     load_sem_id();
 
     log_info("GATE", "Gate opened");
+    int shm_id = atoi(getenv(SHM_LUGGAGE_ENV));
+
+    max_luggage = (int *)shmat(shm_id, NULL, SHM_RDONLY);
 
     char *ipcIdStr = getenv(IPC_ENV);
 
     ipcId = atoi(ipcIdStr);
-
-    if (sem_init(&thread_sem, 0, 1) < 0)
-    {
-        log_error("GATE", "Sem error");
-        exit(-1);
-    }
+    ipc_waiting_room = atoi(getenv(WAITING_ROOM_ID));
 
     pthread_mutex_init(&mutex_passenger_num, NULL);
     pthread_mutex_init(&mutex_gender, NULL);
@@ -121,6 +144,7 @@ int main()
             continue;
         }
 
+        sleep(1);
         if (passenger_num > 0)
         {
             passenger_num++;
@@ -138,9 +162,13 @@ int main()
             log_error("GATE", "Error while creating thread");
             exit(-1);
         }
+        sleep(1);
     }
 
-    log_info("GATE", "No passengers left");
+    sem_p(semId, SEM_END);
+    sem_v(semId, SEM_END);
+
+    shmdt(max_luggage);
 
     return 0;
 }
