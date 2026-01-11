@@ -14,28 +14,7 @@
 #include <sys/types.h>
 #include <fcntl.h> 
 #include <sys/shm.h> 
-
-#define LOG_ENV "CURRENT_RUN_LOG"
-#define IPC_ENV "IPC_ID"
-#define SEM_ENV "SEM_ID"
-#define FIFO_NAME "./fifo"
-#define SEM_IPC 1
-#define SEM_LOG 2
-#define SEM_FERRY 3
-#define SEM_FERRY_CAP 4
-#define SEM_END 5
-#define SEM_LEAVE_PORT 6
-#define SEM_TAKE_PASSENGERS 7
-#define WAITING_ROOM_ID "IPC2_ID"
-#define SEM_IPC2 8
-#define FERRY_CAPACITY 10
-#define SEM_GANGWAY 9
-#define GANGWAY_CAP 5
-#define SEM_MAX_LUGGAGE_SHM 10
-#define SHM_LUGGAGE_ENV "SHM_LUGGAGE"
-#define SEM_FERRY_START 11
-#define SEM_SHM_PASSENGERS 12
-#define SHM_PASSENGERS_ENV "SHM_PASSENGERS"
+#include "config.h"
 
 int semId;
 

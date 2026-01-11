@@ -6,15 +6,14 @@
 #include <errno.h>
 #include <stdbool.h>
 
-#define MIN_BAGGAGE_LIMIT 10
-#define MAX_BAGGAGE_LIMIT 15
-
 int ipc_id;
+int ipc_passengers;
 int max_baggage;
 bool leave = false;
 int *max_baggage_shm;
 int shm_id;
 int *passenger_left_shm;
+int count;
 
 void *gangway()
 {
@@ -49,9 +48,38 @@ void *gangway()
 void go_to_port()
 {
     leave = false;
+    count = 0;
 
     log_info("FERRY", "Ferry in port");
-    if (semctl(semId, SEM_FERRY_CAP, SETVAL, FERRY_CAPACITY) < 0)
+    while (count < FERRY_CAPACITY)
+    {
+        char buff[100];
+
+        struct passenger passenger;
+        sem_p(semId, SEM_IPC);
+        int res = msgrcv(ipc_passengers, &passenger, sizeof(struct passenger) - sizeof(long int), 3, IPC_NOWAIT);
+        sem_v(semId, SEM_IPC);
+
+        if (res < 0)
+        {
+            break;
+        }
+
+        sprintf(buff, "Passenger %d skipped queue and added to waiting room as VIP", passenger.pid);
+        log_info("FERRY", buff);
+
+        sem_p(semId, SEM_IPC2);
+        if (msgsnd(ipc_id, (struct passenger *)&passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
+        {
+            perror("Ipc fail");
+            exit(-1);
+        }
+        sem_v(semId, SEM_IPC2);
+        sleep(1);
+        count++;
+    }
+
+    if (semctl(semId, SEM_FERRY_CAP, SETVAL, FERRY_CAPACITY - count) < 0)
     {
         log_error("FERRY", "Failed to set semaphore");
         exit(-1);
@@ -64,8 +92,7 @@ void go_to_port()
 
 void take_passengers()
 {
-    int count = 0;
-
+    int count_gangway = 0;
     log_info("FERRY", "Ferry started taking passengers");
 
     pthread_t thread_ids[GANGWAY_CAP];
@@ -73,7 +100,7 @@ void take_passengers()
 
     bool append_i = true;
 
-    while (count < FERRY_CAPACITY && !leave)
+    while (count_gangway < FERRY_CAPACITY && !leave)
     {
         if (i == GANGWAY_CAP)
         {
@@ -89,7 +116,7 @@ void take_passengers()
         {
             i++;
         }
-        count++;
+        count_gangway++;
         sleep(2);
     }
 
@@ -111,10 +138,10 @@ void take_passengers()
     sem_p(semId, SEM_FERRY_START);
     log_info("FERRY", "Ferry started course");
 
-    sleep(30);
+    sleep(FERRY_COURSE_TIME);
 
     sem_p(semId, SEM_SHM_PASSENGERS);
-    *passenger_left_shm -= count;
+    *passenger_left_shm -= count_gangway;
     sem_v(semId, SEM_SHM_PASSENGERS);
 
     kill(getppid(), SIGTERM);
@@ -122,6 +149,11 @@ void take_passengers()
 
 void leave_port()
 {
+    if (semctl(semId, SEM_FERRY_CAP, SETVAL, 0) < 0)
+    {
+        log_error("FERRY", "Failed to set semaphore");
+        exit(-1);
+    }
     leave = true;
     sem_v(semId, SEM_FERRY_START);
 }
@@ -149,6 +181,7 @@ int main()
     srand(time(NULL));
 
     ipc_id = atoi(getenv(WAITING_ROOM_ID));
+    ipc_passengers = atoi(getenv(IPC_ENV));
 
     max_baggage = random_number(MIN_BAGGAGE_LIMIT, MAX_BAGGAGE_LIMIT);
 
@@ -158,7 +191,7 @@ int main()
     char buff[100];
 
     max_baggage_shm = (int *)shmat(shm_id, NULL, SHM_RND);
-    passenger_left_shm = (int*)shmat(shm_passengers_id, NULL, SHM_RND);
+    passenger_left_shm = (int *)shmat(shm_passengers_id, NULL, SHM_RND);
 
     sprintf(buff, "Ferry created with %d cap and %d max baggage", FERRY_CAPACITY, max_baggage);
 

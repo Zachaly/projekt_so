@@ -4,11 +4,6 @@
 #include <stdbool.h>
 #include "queue.h"
 
-#define PASSENGERS_NUMBER 1
-#define GATE_NUM 3
-#define FERRY_NUM 1
-#define FERRY_START 30
-
 void set_env_var(char *name, char *value)
 {
     if (setenv(name, value, 1) < 0)
@@ -246,7 +241,7 @@ int main()
         kill(current_ferry, SIGSYS);
         sleep_interruptable(20);
         kill(current_ferry, SIGTERM);
-        sleep_interruptable(30);
+        sleep_interruptable(FERRY_WAIT_TIME);
 
         sem_v(semId, SEM_LEAVE_PORT);
         if (!forced_ferry_leave)
@@ -258,16 +253,30 @@ int main()
         sleep(1);
         sem_p(semId, SEM_SHM_PASSENGERS);
     }
-    semctl(semId, SEM_END, SETVAL, GATE_NUM + FERRY_NUM + PASSENGERS_NUMBER);
+    sem_v(semId, SEM_SHM_PASSENGERS);
+    semctl(semId, SEM_END, SETVAL, GATE_NUM + FERRY_NUM + PASSENGERS_NUMBER + 1);
+    semctl(semId, SEM_FERRY_CAP, SETVAL, GATE_NUM * 3);
+    semctl(semId, SEM_SHM_PASSENGERS, GATE_NUM * 2);
 
     free_queue(travelling_ferry_pids);
     free_queue(ferry_pids);
 
     log_info("ORCHESTRATOR", "No passengers left");
 
-    sleep(10);
+    for(int i = 0; i < GATE_NUM; i++)
+    {
+        kill(gates[i], 9);
+    }
 
-    while(wait(0) > 0);
+    for(int i = 0; i < PASSENGERS_NUMBER; i++)
+    {
+        kill(passenger_ids[i], 9);
+    }
+
+    for(int i = 0; i < FERRY_NUM; i++)
+    {
+        kill(ferry_ids[i], 9);
+    }
 
     if(shmctl(shm_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0)
     {

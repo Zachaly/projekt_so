@@ -1,9 +1,7 @@
 #include "utilities.h"
 #include "structures.h"
 #include <signal.h>
-
-#define MIN_LUGGAGE 0
-#define MAX_LUGGAGE 20
+#include <stdbool.h>
 
 int random_number(int min, int max);
 
@@ -37,17 +35,24 @@ int main()
     load_sem_id();
     srand(time(NULL));
 
-    data.baggage = random_number(MIN_LUGGAGE, MAX_LUGGAGE);
+    data.baggage = random_number(MIN_PASSENGER_LUGGAGE, MAX_PASSENGER_LUGGAGE);
     data.wait_limit = 3;
-    data.mtype = random_number(0, 1000) >= 500 ? MALE : FEMALE;
+    data.mtype = random_number(0, 1000) >= MALE_CHANCE ? MALE : FEMALE;
     data.pid = getpid();
+
+    bool is_vip = random_number(0, 1000) >= VIP_CHANCE ? false : true;
+
+    if(is_vip)
+    {
+        data.mtype = 3;
+    }
 
     char buff[200];
 
     int shm_id = atoi(getenv(SHM_LUGGAGE_ENV));
     max_luggage = shmat(shm_id, NULL, SHM_RDONLY);
 
-    sprintf(buff, "%ld passenger created with %d baggage", data.mtype, data.baggage);
+    sprintf(buff, "%ld passenger created with %d baggage(is VIP? %d)", data.mtype, data.baggage, is_vip);
 
     log_info("PASSENGER", buff);
 
@@ -69,7 +74,7 @@ int main()
 
     sem_p(semId, SEM_END);
 
-    shmdt(max_luggage);
+    shmdt(&max_luggage);
 
     return 0;
 }
