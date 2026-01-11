@@ -68,6 +68,7 @@ int main()
     sem_v(semId, SEM_IPC);
 
     sem_p(semId, SEM_END);
+
     shmdt(max_luggage);
 
     return 0;

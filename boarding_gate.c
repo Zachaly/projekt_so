@@ -107,8 +107,9 @@ int main()
 
     log_info("GATE", "Gate opened");
     int shm_id = atoi(getenv(SHM_LUGGAGE_ENV));
-
+    int shm_passengers_id = atoi(getenv(SHM_PASSENGERS_ENV));
     max_luggage = (int *)shmat(shm_id, NULL, SHM_RDONLY);
+    int *passengers = (int *)shmat(shm_passengers_id, NULL, SHM_RDONLY);
 
     char *ipcIdStr = getenv(IPC_ENV);
 
@@ -121,8 +122,10 @@ int main()
     pthread_t id_1;
     pthread_t id_2;
 
-    while (!stop)
+    sem_p(semId, SEM_SHM_PASSENGERS);
+    while (*passengers > 0)
     {
+        sem_v(semId, SEM_SHM_PASSENGERS);
         if (passenger_num == 0)
         {
             current_gender = 0;
@@ -141,6 +144,7 @@ int main()
                 log_error("GATE", "Error while detaching thread");
                 exit(-1);
             }
+            sem_p(semId, SEM_SHM_PASSENGERS);
             continue;
         }
 
@@ -153,6 +157,7 @@ int main()
                 log_error("GATE", "Error while creating thread");
                 exit(-1);
             }
+            sem_p(semId, SEM_SHM_PASSENGERS);
             continue;
         }
 
@@ -163,12 +168,13 @@ int main()
             exit(-1);
         }
         sleep(1);
+        sem_p(semId, SEM_SHM_PASSENGERS);
     }
-
+    sem_v(semId, SEM_SHM_PASSENGERS);
     sem_p(semId, SEM_END);
-    sem_v(semId, SEM_END);
 
-    shmdt(max_luggage);
+    shmdt(&max_luggage);
+    shmdt(&passengers);
 
     return 0;
 }

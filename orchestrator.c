@@ -4,9 +4,9 @@
 #include <stdbool.h>
 #include "queue.h"
 
-#define PASSENGERS_NUMBER 60
+#define PASSENGERS_NUMBER 1
 #define GATE_NUM 3
-#define FERRY_NUM 3
+#define FERRY_NUM 1
 #define FERRY_START 30
 
 void set_env_var(char *name, char *value)
@@ -23,7 +23,7 @@ Queue *travelling_ferry_pids;
 bool sleep_break = false;
 bool forced_ferry_leave = false;
 int current_ferry;
-int passengers_left = PASSENGERS_NUMBER;
+int *passengers_left;
 char strBuff[100];
 
 void signal_handler(int signum, siginfo_t *info, void *ptr)
@@ -100,7 +100,7 @@ int main()
     semctl(semId, SEM_IPC2, SETVAL, 1);
     semctl(semId, SEM_MAX_LUGGAGE_SHM, SETVAL, 1);
     semctl(semId, SEM_FERRY_START, SETVAL, 0);
-    semctl(semId, SEM_AVAILABLE_FERRIES, SETVAL, FERRY_NUM);
+    semctl(semId, SEM_SHM_PASSENGERS, SETVAL, 1);
 
     load_sem_id();
 
@@ -120,15 +120,15 @@ int main()
 
     ipcKey = ftok(".", 'C');
 
-    ipcId;
+    int ipc_wainting_room;
 
-    if ((ipcId = msgget(ipcKey, IPC_CREAT | 0600)) < 0)
+    if ((ipc_wainting_room = msgget(ipcKey, IPC_CREAT | 0600)) < 0)
     {
         log_error("ORCHESTRATOR", "Failure while creating ipc");
         exit(-1);
     }
 
-    sprintf(strBuff, "%d", ipcId);
+    sprintf(strBuff, "%d", ipc_wainting_room);
 
     set_env_var(WAITING_ROOM_ID, strBuff);
 
@@ -145,9 +145,26 @@ int main()
 
     set_env_var(SHM_LUGGAGE_ENV, strBuff);
 
+    shm_key = ftok(".", 'E');
+
+    int shm_passengers_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
+    if (shm_passengers_id < 0)
+    {
+        log_error("ORCHESTRATOR", "Failure while creating shm");
+        exit(-1);
+    }
+
+    sprintf(strBuff, "%d", shm_passengers_id);
+
+    set_env_var(SHM_PASSENGERS_ENV, strBuff);
+
+    passengers_left = shmat(shm_passengers_id, NULL, SHM_RND);
+    *passengers_left = PASSENGERS_NUMBER;
+
     ferry_pids = init_queue(sizeof(int));
     travelling_ferry_pids = init_queue(sizeof(int));
 
+    int ferry_ids[FERRY_NUM];
     for (int i = 0; i < FERRY_NUM; i++)
     {
         int id = fork();
@@ -162,10 +179,12 @@ int main()
             exit(0);
             break;
         }
+        ferry_ids[i] = id;
         enqueue(ferry_pids, id);
         sleep(1);
     }
 
+    int passenger_ids[PASSENGERS_NUMBER];
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         int id = fork();
@@ -180,9 +199,11 @@ int main()
             exit(0);
             break;
         }
+        passenger_ids[i] = id;
         sleep(1);
     }
 
+    int gates[GATE_NUM];
     for (int i = 0; i < GATE_NUM; i++)
     {
         int id = fork();
@@ -196,6 +217,7 @@ int main()
             execl("boarding_gate.out", "", NULL);
             exit(0);
         }
+        gates[i] = id;
     }
 
     sigset_t sigs;
@@ -209,9 +231,11 @@ int main()
 
     sigaction(SIGTERM, &sa, NULL);
 
-    while (passengers_left > 0)
+    sem_p(semId, SEM_SHM_PASSENGERS);
+    while (*passengers_left > 0)
     {
-        if(queue_size(ferry_pids) < 1)
+        sem_v(semId, SEM_SHM_PASSENGERS);
+        if (queue_size(ferry_pids) < 1)
         {
             pause();
             continue;
@@ -232,24 +256,38 @@ int main()
 
         enqueue(travelling_ferry_pids, current_ferry);
         sleep(1);
+        sem_p(semId, SEM_SHM_PASSENGERS);
     }
+    semctl(semId, SEM_END, SETVAL, GATE_NUM + FERRY_NUM + PASSENGERS_NUMBER);
 
     free_queue(travelling_ferry_pids);
     free_queue(ferry_pids);
 
     log_info("ORCHESTRATOR", "No passengers left");
 
-    sem_v(semId, SEM_END);
+    sleep(10);
 
-    log_info("ORCHESTRATOR", "IPC closed");
+    while(wait(0) > 0);
 
-    if (semctl(semId, 0, IPC_RMID) < 0)
+    if(shmctl(shm_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0)
     {
-        perror("Failed to delete semaphore");
+        perror("Failed to delete shm");
         exit(-1);
     }
 
-    log_info("ORCHESTRATOR", "Semaphore closed");
+    if(msgctl(ipcId, IPC_RMID, NULL) < 0 || msgctl(ipc_wainting_room, IPC_RMID, NULL) < 0)
+    {
+        perror("Failed to delete ipc");
+        exit(-1);
+    }
+
+    if (semctl(semId, 0, IPC_RMID) < 0)
+    {
+        perror("Failed to delete semaphores");
+        exit(-1);
+    }
+
+    printf("Cleanup ended\n");
 
     return 0;
 }

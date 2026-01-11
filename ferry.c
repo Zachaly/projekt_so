@@ -14,6 +14,7 @@ int max_baggage;
 bool leave = false;
 int *max_baggage_shm;
 int shm_id;
+int *passenger_left_shm;
 
 void *gangway()
 {
@@ -112,6 +113,10 @@ void take_passengers()
 
     sleep(30);
 
+    sem_p(semId, SEM_SHM_PASSENGERS);
+    *passenger_left_shm -= count;
+    sem_v(semId, SEM_SHM_PASSENGERS);
+
     kill(getppid(), SIGTERM);
 }
 
@@ -148,10 +153,12 @@ int main()
     max_baggage = random_number(MIN_BAGGAGE_LIMIT, MAX_BAGGAGE_LIMIT);
 
     shm_id = atoi(getenv(SHM_LUGGAGE_ENV));
+    int shm_passengers_id = atoi(getenv(SHM_PASSENGERS_ENV));
 
     char buff[100];
 
     max_baggage_shm = (int *)shmat(shm_id, NULL, SHM_RND);
+    passenger_left_shm = (int*)shmat(shm_passengers_id, NULL, SHM_RND);
 
     sprintf(buff, "Ferry created with %d cap and %d max baggage", FERRY_CAPACITY, max_baggage);
 
@@ -162,7 +169,6 @@ int main()
     signal(SIGPIPE, sig_handler);
 
     sem_p(semId, SEM_END);
-    sem_v(semId, SEM_END);
 
     shmdt(&max_baggage_shm);
 
