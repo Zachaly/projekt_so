@@ -36,7 +36,7 @@ void sem_p(int sem_id, int sem_num) {
             sem_p(sem_id, sem_num);
         }
         else {
-            perror("Blad opuszczania semafora!");
+            perror("Semaphore error!");
             exit(-1);
         }
     }
@@ -49,7 +49,7 @@ void sem_v(int sem_id, int sem_num) {
     buf.sem_flg = 0;
 
     if (semop(sem_id, &buf, 1) == -1) {
-        perror("Blad podnoszenia semafora!");
+        perror("Semaphore error!");
         exit(-1);
     }
 }

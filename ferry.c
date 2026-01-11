@@ -14,6 +14,9 @@ int *max_baggage_shm;
 int shm_id;
 int *passenger_left_shm;
 int count;
+int ferry_passengers;
+int last_passengers = 0;
+pthread_mutex_t mutex;
 
 void *gangway()
 {
@@ -42,15 +45,28 @@ void *gangway()
     sprintf(buff, "Passenger %d arrived at ferry", passenger.pid);
     log_info("FERRY", buff);
 
+    pthread_mutex_lock(&mutex);
+    ferry_passengers++;
+    pthread_mutex_unlock(&mutex);
+
     pthread_exit(0);
 }
 
 void go_to_port()
 {
     leave = false;
-    count = 0;
+    count = last_passengers;
+    ferry_passengers = 0;
 
     log_info("FERRY", "Ferry in port");
+
+    sem_p(semId, SEM_IPC2);
+    struct msqid_ds queue_data;
+    msgctl(ipc_id, IPC_STAT, &queue_data);
+    sem_v(semId, SEM_IPC2);
+
+    count = queue_data.msg_qnum;
+
     while (count < FERRY_CAPACITY)
     {
         char buff[100];
@@ -59,7 +75,6 @@ void go_to_port()
         sem_p(semId, SEM_IPC);
         int res = msgrcv(ipc_passengers, &passenger, sizeof(struct passenger) - sizeof(long int), 3, IPC_NOWAIT);
         sem_v(semId, SEM_IPC);
-
         if (res < 0)
         {
             break;
@@ -81,7 +96,7 @@ void go_to_port()
 
     if (semctl(semId, SEM_FERRY_CAP, SETVAL, FERRY_CAPACITY - count) < 0)
     {
-        log_error("FERRY", "Failed to set semaphore");
+        log_error("FERRY", "FERRY");
         exit(-1);
     }
 
@@ -92,15 +107,20 @@ void go_to_port()
 
 void take_passengers()
 {
-    int count_gangway = 0;
     log_info("FERRY", "Ferry started taking passengers");
 
     pthread_t thread_ids[GANGWAY_CAP];
+
+    for (int i = 0; i < GANGWAY_CAP; i++)
+    {
+        thread_ids[i] = 0;
+    }
+
     int i = 0;
 
     bool append_i = true;
 
-    while (count_gangway < FERRY_CAPACITY && !leave)
+    while (!leave)
     {
         if (i == GANGWAY_CAP)
         {
@@ -116,14 +136,18 @@ void take_passengers()
         {
             i++;
         }
-        count_gangway++;
         sleep(2);
     }
 
     for (int i = 0; i < GANGWAY_CAP; i++)
     {
-        int j_res = pthread_join(thread_ids[0], NULL);
-        if (j_res < 0 && errno == ESRCH)
+        if (thread_ids[i] == 0)
+        {
+            continue;
+        }
+
+        int j_res = pthread_join(thread_ids[i], NULL);
+        if (j_res != 0)
         {
             continue;
         }
@@ -133,15 +157,25 @@ void take_passengers()
 
     sem_p(semId, SEM_LEAVE_PORT);
 
-    log_info("FERRY", "Ferry will leave the port");
+    if (ferry_passengers == 0)
+    {
+        log_info("FERRY", "Ferry didn't take off due to no passengers");
+        sem_v(semId, SEM_FERRY_LEFT);
+        sem_p(semId, SEM_FERRY_START);
+        return;
+    }
 
+    char buff[100];
+    sprintf(buff, "Ferry started course");
     sem_p(semId, SEM_FERRY_START);
-    log_info("FERRY", "Ferry started course");
+    log_info("FERRY", buff);
+    sem_v(semId, SEM_FERRY_LEFT);
 
     sleep(FERRY_COURSE_TIME);
 
     sem_p(semId, SEM_SHM_PASSENGERS);
-    *passenger_left_shm -= count_gangway;
+    *passenger_left_shm -= ferry_passengers;
+    last_passengers = FERRY_CAPACITY - ferry_passengers;
     sem_v(semId, SEM_SHM_PASSENGERS);
 
     kill(getppid(), SIGTERM);
@@ -149,12 +183,10 @@ void take_passengers()
 
 void leave_port()
 {
-    if (semctl(semId, SEM_FERRY_CAP, SETVAL, 0) < 0)
-    {
-        log_error("FERRY", "Failed to set semaphore");
-        exit(-1);
-    }
+    log_info("FERRY", "Ferry will leave the port");
+
     leave = true;
+
     sem_v(semId, SEM_FERRY_START);
 }
 
@@ -200,6 +232,7 @@ int main()
     signal(SIGTERM, sig_handler);
     signal(SIGSYS, sig_handler);
     signal(SIGPIPE, sig_handler);
+    signal(SIGINT, sig_handler);
 
     sem_p(semId, SEM_END);
 

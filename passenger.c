@@ -34,6 +34,7 @@ int main()
 {
     load_sem_id();
     srand(time(NULL));
+    signal(SIGINT, readd_to_queue);
 
     data.baggage = random_number(MIN_PASSENGER_LUGGAGE, MAX_PASSENGER_LUGGAGE);
     data.wait_limit = 3;
