@@ -7,23 +7,23 @@ int random_number(int min, int max);
 
 struct passenger data;
 int ipc_id;
-int *max_luggage;
+int *shm_max_luggage;
 
 void readd_to_queue(int sig)
 {
     if (sig == SIGTERM)
     {
-        sem_p(semId, SEM_MAX_LUGGAGE_SHM);
-        data.baggage = *max_luggage;
-        sem_v(semId, SEM_MAX_LUGGAGE_SHM);
+        sem_p(SEM_MAX_LUGGAGE_SHM);
+        data.baggage = *shm_max_luggage;
+        sem_v(SEM_MAX_LUGGAGE_SHM);
 
-        sem_p(semId, SEM_IPC);
+        sem_p(SEM_IPC_PASSENGER_QUEUE);
         if (msgsnd(ipc_id, (struct passenger *)&data, sizeof(struct passenger) - sizeof(long int), 0) < 0)
         {
             log_error("PASSENGER", "Failure while adding passenger to queue");
             exit(-1);
         }
-        sem_v(semId, SEM_IPC);
+        sem_v(SEM_IPC_PASSENGER_QUEUE);
 
         log_info("PASSENGER", "Passenger adjusted the baggage");
     }
@@ -36,7 +36,6 @@ int main()
     signal(SIGINT, readd_to_queue);
 
     data.baggage = random_number(MIN_PASSENGER_LUGGAGE, MAX_PASSENGER_LUGGAGE);
-    data.wait_limit = 3;
     data.mtype = random_number(0, 1000) >= MALE_CHANCE ? MALE : FEMALE;
     data.pid = getpid();
 
@@ -50,17 +49,17 @@ int main()
     char buff[200];
 
     int shm_id = atoi(getenv(SHM_LUGGAGE_ENV));
-    max_luggage = shmat(shm_id, NULL, SHM_RDONLY);
+    shm_max_luggage = shmat(shm_id, NULL, SHM_RDONLY);
 
     sprintf(buff, "%ld passenger created with %d baggage(is VIP? %d)", data.mtype, data.baggage, is_vip);
 
     log_info("PASSENGER", buff);
 
-    char *idStr = getenv(IPC_ENV);
+    char *idStr = getenv(IPC_PASSENGER_QUEUE_ENV);
 
     ipc_id = atoi(idStr);
 
-    sem_p(semId, SEM_IPC);
+    sem_p(SEM_IPC_PASSENGER_QUEUE);
 
     if (msgsnd(ipc_id, (struct passenger *)&data, sizeof(struct passenger) - sizeof(long int), 0) < 0)
     {
@@ -70,11 +69,9 @@ int main()
 
     signal(SIGTERM, readd_to_queue);
 
-    sem_v(semId, SEM_IPC);
+    sem_v(SEM_IPC_PASSENGER_QUEUE);
 
-    sem_p(semId, SEM_END);
-
-    shmdt(&max_luggage);
+    shmdt(&shm_max_luggage);
 
     return 0;
 }

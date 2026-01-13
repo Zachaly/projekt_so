@@ -7,14 +7,12 @@
 #include <stdbool.h>
 #include "queue_pthread.h"
 
-int ipc_id;
-int ipc_passengers;
+int ipc_waiting_room_id;
+int ipc_passengers_id;
 int max_baggage;
 bool leave = false;
 int *max_baggage_shm;
-int shm_id;
 int *passenger_left_shm;
-int count;
 int ferry_passengers;
 int last_passengers = 0;
 int course_time;
@@ -26,9 +24,9 @@ void *gangway()
     char buff[100];
 
     struct passenger passenger;
-    sem_p(semId, SEM_IPC2);
-    int res = msgrcv(ipc_id, &passenger, sizeof(struct passenger) - sizeof(long int), 0, IPC_NOWAIT);
-    sem_v(semId, SEM_IPC2);
+    sem_p(SEM_IPC_WAITING_ROOM);
+    int res = msgrcv(ipc_waiting_room_id, &passenger, sizeof(struct passenger) - sizeof(long int), 0, IPC_NOWAIT);
+    sem_v(SEM_IPC_WAITING_ROOM);
     if (res < 0 && errno == ENOMSG)
     {
         pthread_exit(0);
@@ -66,7 +64,7 @@ void leave_port()
 
     leave = true;
 
-    sem_v(semId, SEM_FERRY_START);
+    sem_v(SEM_FERRY_START);
 }
 
 void sig_handler(int signum)
@@ -87,22 +85,22 @@ int main()
 
     srand(time(NULL));
 
-    ipc_id = atoi(getenv(WAITING_ROOM_ID));
-    ipc_passengers = atoi(getenv(IPC_ENV));
+    ipc_waiting_room_id = atoi(getenv(WAITING_ROOM_ID));
+    ipc_passengers_id = atoi(getenv(IPC_PASSENGER_QUEUE_ENV));
 
     max_baggage = random_number(MIN_BAGGAGE_LIMIT, MAX_BAGGAGE_LIMIT);
 
     course_time = random_number(MIN_COURSE_TIME, MAX_COURSE_TIME);
 
-    shm_id = atoi(getenv(SHM_LUGGAGE_ENV));
+    int shm_max_baggage_id = atoi(getenv(SHM_LUGGAGE_ENV));
     int shm_passengers_id = atoi(getenv(SHM_PASSENGERS_ENV));
 
     char buff[100];
 
-    max_baggage_shm = (int *)shmat(shm_id, NULL, SHM_RND);
+    max_baggage_shm = (int *)shmat(shm_max_baggage_id, NULL, SHM_RND);
     passenger_left_shm = (int *)shmat(shm_passengers_id, NULL, SHM_RND);
 
-    sprintf(buff, "Ferry created with %d cap, %d max baggage nad %d course time", FERRY_CAPACITY, max_baggage, course_time);
+    sprintf(buff, "Ferry created with %d cap, %d max baggage and %d course time", FERRY_CAPACITY, max_baggage, course_time);
 
     log_info("FERRY", buff);
 
@@ -110,32 +108,31 @@ int main()
     signal(SIGPIPE, sig_handler);
     signal(SIGINT, sig_handler);
 
-    sem_p(semId, SEM_SHM_PASSENGERS);
+    sem_p(SEM_SHM_PASSENGERS);
     while (*passenger_left_shm > 0)
     {
-        sem_v(semId, SEM_SHM_PASSENGERS);
+        sem_v(SEM_SHM_PASSENGERS);
 
         while(not_in_port);
 
         leave = false;
-        count = last_passengers;
         ferry_passengers = 0;
 
         log_info("FERRY", "Ferry in port");
 
-        sem_p(semId, SEM_IPC2);
+        sem_p(SEM_IPC_WAITING_ROOM);
         struct msqid_ds queue_data;
-        msgctl(ipc_id, IPC_STAT, &queue_data);
-        sem_v(semId, SEM_IPC2);
+        msgctl(ipc_waiting_room_id, IPC_STAT, &queue_data);
+        sem_v(SEM_IPC_WAITING_ROOM);
 
-        count = queue_data.msg_qnum;
+        int count = queue_data.msg_qnum;
 
         while (count < FERRY_CAPACITY)
         {
             struct passenger passenger;
-            sem_p(semId, SEM_IPC);
-            int res = msgrcv(ipc_passengers, &passenger, sizeof(struct passenger) - sizeof(long int), 3, IPC_NOWAIT);
-            sem_v(semId, SEM_IPC);
+            sem_p(SEM_IPC_PASSENGER_QUEUE);
+            int res = msgrcv(ipc_passengers_id, &passenger, sizeof(struct passenger) - sizeof(long int), 3, IPC_NOWAIT);
+            sem_v(SEM_IPC_PASSENGER_QUEUE);
             if (res < 0)
             {
                 break;
@@ -144,26 +141,26 @@ int main()
             sprintf(buff, "Passenger %d skipped queue and added to waiting room as VIP", passenger.pid);
             log_info("FERRY", buff);
 
-            sem_p(semId, SEM_IPC2);
-            if (msgsnd(ipc_id, (struct passenger *)&passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
+            sem_p(SEM_IPC_WAITING_ROOM);
+            if (msgsnd(ipc_waiting_room_id, (struct passenger *)&passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
             {
                 perror("Ipc fail");
                 exit(-1);
             }
-            sem_v(semId, SEM_IPC2);
+            sem_v(SEM_IPC_WAITING_ROOM);
             custom_sleep(1);
             count++;
         }
 
-        if (semctl(semId, SEM_FERRY_CAP, SETVAL, FERRY_CAPACITY - count) < 0)
+        if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, FERRY_CAPACITY - count) < 0)
         {
             log_error("FERRY", "FERRY");
             exit(-1);
         }
 
-        sem_p(semId, SEM_MAX_LUGGAGE_SHM);
+        sem_p(SEM_MAX_LUGGAGE_SHM);
         *max_baggage_shm = max_baggage;
-        sem_v(semId, SEM_MAX_LUGGAGE_SHM);
+        sem_v(SEM_MAX_LUGGAGE_SHM);
 
         custom_sleep(FERRY_START_TAKING_PASSENGERS_TIME);
 
@@ -205,37 +202,36 @@ int main()
 
         free_queue(thread_ids);
 
-        sem_p(semId, SEM_LEAVE_PORT);
+        sem_p(SEM_LEAVE_PORT);
 
         if (ferry_passengers == 0)
         {
             log_info("FERRY", "Ferry didn't take off due to no passengers");
-            sem_v(semId, SEM_FERRY_LEFT);
-            sem_p(semId, SEM_FERRY_START);
-            sem_p(semId, SEM_SHM_PASSENGERS);
+            sem_v(SEM_FERRY_LEFT);
+            sem_p(SEM_FERRY_START);
+            sem_p(SEM_SHM_PASSENGERS);
             continue;
         }
 
         char buff[100];
         sprintf(buff, "Ferry started course");
         not_in_port = true;
-        sem_p(semId, SEM_FERRY_START);
+        sem_p(SEM_FERRY_START);
         log_info("FERRY", buff);
-        sem_v(semId, SEM_FERRY_LEFT);
+        sem_v(SEM_FERRY_LEFT);
 
         custom_sleep(course_time);
 
-        sem_p(semId, SEM_SHM_PASSENGERS);
+        sem_p(SEM_SHM_PASSENGERS);
         *passenger_left_shm -= ferry_passengers;
-        last_passengers = FERRY_CAPACITY - ferry_passengers;
-        sem_v(semId, SEM_SHM_PASSENGERS);
+        sem_v(SEM_SHM_PASSENGERS);
 
         kill(getppid(), SIGTERM);
 
-        sem_p(semId, SEM_SHM_PASSENGERS);
+        sem_p(SEM_SHM_PASSENGERS);
     }
 
-    sem_v(semId, SEM_SHM_PASSENGERS);
+    sem_v(SEM_SHM_PASSENGERS);
 
     shmdt(&max_baggage_shm);
     shmdt(&passenger_left_shm);

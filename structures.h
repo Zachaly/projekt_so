@@ -4,6 +4,5 @@
 struct passenger {
     long int mtype; // also stands for gender
     int baggage;
-    int wait_limit;
     int pid;
 };
