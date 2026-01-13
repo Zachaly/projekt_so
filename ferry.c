@@ -113,7 +113,8 @@ int main()
     {
         sem_v(SEM_SHM_PASSENGERS);
 
-        while(not_in_port);
+        while (not_in_port)
+            ;
 
         leave = false;
         ferry_passengers = 0;
@@ -203,6 +204,7 @@ int main()
         free_queue(thread_ids);
 
         sem_p(SEM_LEAVE_PORT);
+        not_in_port = true;
 
         if (ferry_passengers == 0)
         {
@@ -210,12 +212,12 @@ int main()
             sem_v(SEM_FERRY_LEFT);
             sem_p(SEM_FERRY_START);
             sem_p(SEM_SHM_PASSENGERS);
+            kill(getppid(), SIGTERM);
             continue;
         }
 
         char buff[100];
         sprintf(buff, "Ferry started course");
-        not_in_port = true;
         sem_p(SEM_FERRY_START);
         log_info("FERRY", buff);
         sem_v(SEM_FERRY_LEFT);
