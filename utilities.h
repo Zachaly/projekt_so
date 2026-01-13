@@ -109,5 +109,19 @@ void log_error(char *source, char *text)
 
 int random_number(int min, int max)
 {
-    return (rand() % max) + min;
+    return rand() % (max + 1 - min) + min;
+}
+
+void custom_sleep(int t)
+{
+    time_t start;
+    time(&start);
+
+    time_t current;
+    time(&current);
+
+    while(current - start < t)
+    {
+        time(&current);
+    }
 }

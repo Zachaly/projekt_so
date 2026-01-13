@@ -7,13 +7,13 @@ typedef struct queue {
 	size_t element_size;
 } Queue;
 
-Queue* init_queue(size_t element_size)
+Queue* init_queue()
 {
 	Queue* queue = malloc(sizeof(Queue));
 
 	queue->arr = NULL;
 	queue->tail = -1;
-	queue->element_size = element_size;
+	queue->element_size = sizeof(int);
 
 	return queue;
 }

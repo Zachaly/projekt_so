@@ -14,18 +14,17 @@ void set_env_var(char *name, char *value)
 }
 
 Queue *ferry_pids;
-Queue *travelling_ferry_pids;
-bool sleep_break = false;
+bool custom_sleep_break = false;
 bool forced_ferry_leave = false;
 int current_ferry;
 int *passengers_left;
 char strBuff[100];
 
-void signal_handler(int signum)
+void signal_handler(int signum, siginfo_t *info, void *context)
 {
     if (signum == SIGTERM)
     {
-        int id = dequeue(travelling_ferry_pids);
+        pid_t id = info->si_pid;
         enqueue(ferry_pids, id);
         sprintf(strBuff, "Ferry %d returned from course", id);
         log_info("ORCHESTRATOR", strBuff);
@@ -38,18 +37,18 @@ void signal_handler(int signum)
             log_error("FERRY", "Failed to set semaphore");
             exit(-1);
         }
-        sleep_break = true;
+        custom_sleep_break = true;
         forced_ferry_leave = true;
     }
 }
 
-void sleep_interruptable(int seconds)
+void custom_sleep_interruptable(int seconds)
 {
     while (seconds > 0)
     {
-        if (!sleep_break)
+        if (!custom_sleep_break)
         {
-            sleep(1);
+            custom_sleep(1);
         }
         else
         {
@@ -57,7 +56,7 @@ void sleep_interruptable(int seconds)
         }
         seconds--;
     }
-    sleep_break = false;
+    custom_sleep_break = false;
 }
 
 int main()
@@ -192,8 +191,7 @@ int main()
 
     set_env_var(SHM_LAST_GENDER_ENV, strBuff);
 
-    ferry_pids = init_queue(sizeof(int));
-    travelling_ferry_pids = init_queue(sizeof(int));
+    ferry_pids = init_queue();
 
     int ferry_ids[FERRY_NUM];
     for (int i = 0; i < FERRY_NUM; i++)
@@ -212,7 +210,7 @@ int main()
         }
         ferry_ids[i] = id;
         enqueue(ferry_pids, id);
-        sleep(1);
+        custom_sleep(1);
     }
 
     int passenger_ids[PASSENGERS_NUMBER];
@@ -231,7 +229,7 @@ int main()
             break;
         }
         passenger_ids[i] = id;
-        sleep(1);
+        custom_sleep(1);
     }
 
     int gates[GATE_NUM];
@@ -251,8 +249,11 @@ int main()
         gates[i] = id;
     }
 
-    signal(SIGTERM, signal_handler);
-    signal(SIGINT, signal_handler);
+    struct sigaction sa;
+    sa.sa_sigaction = signal_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
 
     sem_p(semId, SEM_SHM_PASSENGERS);
     while (*passengers_left > 0)
@@ -271,25 +272,22 @@ int main()
 
         kill(current_ferry, SIGSYS);
         semctl(semId, SEM_GATE_START, SETVAL, GATE_NUM);
-        sleep_interruptable(20);
-        kill(current_ferry, SIGTERM);
-        sleep_interruptable(FERRY_WAIT_TIME);
+
+        custom_sleep_interruptable(FERRY_START_TAKING_PASSENGERS_TIME + FERRY_WAIT_FOR_PASSENGERS_TIME);
 
         sem_v(semId, SEM_LEAVE_PORT);
         kill(current_ferry, SIGPIPE);
 
         sem_p(semId, SEM_FERRY_LEFT);
 
-        enqueue(travelling_ferry_pids, current_ferry);
-        sleep(1);
         sem_p(semId, SEM_SHM_PASSENGERS);
     }
+
     sem_v(semId, SEM_SHM_PASSENGERS);
     semctl(semId, SEM_END, SETVAL, GATE_NUM + FERRY_NUM + PASSENGERS_NUMBER + 1);
     semctl(semId, SEM_FERRY_CAP, SETVAL, GATE_NUM * 3);
     semctl(semId, SEM_SHM_PASSENGERS, GATE_NUM * 2);
 
-    free_queue(travelling_ferry_pids);
     free_queue(ferry_pids);
 
     log_info("ORCHESTRATOR", "No passengers left");

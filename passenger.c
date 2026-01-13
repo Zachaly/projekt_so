@@ -18,7 +18,6 @@ void readd_to_queue(int sig)
         sem_v(semId, SEM_MAX_LUGGAGE_SHM);
 
         sem_p(semId, SEM_IPC);
-
         if (msgsnd(ipc_id, (struct passenger *)&data, sizeof(struct passenger) - sizeof(long int), 0) < 0)
         {
             log_error("PASSENGER", "Failure while adding passenger to queue");

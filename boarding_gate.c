@@ -3,16 +3,17 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include "errno.h"
+#include "queue_pthread.h"
 
 int current_gender = 0;
 int ipcId;
 int stop = false;
 pthread_mutex_t mutex;
-int passenger_num = 0;
 int ipc_waiting_room;
 int *max_luggage;
 int *shm_gender_swap;
 int *shm_last_gender;
+Queue *gate_passengers;
 
 pthread_t id_1;
 pthread_t id_2;
@@ -32,7 +33,6 @@ void *take_passenger()
     pthread_mutex_lock(&mutex);
     if (errno == ENOMSG && current_gender == 0)
     {
-        passenger_num--;
         sem_v(semId, SEM_FERRY_CAP);
         pthread_mutex_unlock(&mutex);
         pthread_exit(0);
@@ -40,7 +40,6 @@ void *take_passenger()
     }
     else if (errno == ENOMSG)
     {
-        passenger_num--;
         sem_v(semId, SEM_FERRY_CAP);
         current_gender = 0;
         pthread_mutex_unlock(&mutex);
@@ -49,7 +48,6 @@ void *take_passenger()
     }
     else if (result < 0)
     {
-        passenger_num--;
         pthread_mutex_unlock(&mutex);
         sem_v(semId, SEM_FERRY_CAP);
         log_error("GATE", "IPC error");
@@ -66,6 +64,13 @@ void *take_passenger()
     {
         *shm_gender_swap = 3;
     }
+    if(current_gender != 0 && current_gender != passenger.mtype && queue_size(gate_passengers) > 0)
+    {
+        pthread_t id = dequeue(gate_passengers);
+        pthread_join(id, NULL);
+        pthread_detach(id);
+    }
+
     *shm_last_gender = passenger.mtype;
     sem_v(semId, SEM_SHM_GENDER);
 
@@ -78,7 +83,7 @@ void *take_passenger()
 
     log_info("GATE", log_buff);
 
-    sleep(5);
+    custom_sleep(5);
 
     pthread_mutex_lock(&mutex);
     sem_p(semId, SEM_MAX_LUGGAGE_SHM);
@@ -105,7 +110,6 @@ void *take_passenger()
     }
     sem_v(semId, SEM_MAX_LUGGAGE_SHM);
 
-    passenger_num--;
     pthread_mutex_unlock(&mutex);
 
     pthread_exit(0);
@@ -134,6 +138,7 @@ int main()
 
     pthread_mutex_init(&mutex, NULL);
 
+    gate_passengers = init_queue();
     sem_p(semId, SEM_GATE_START);
     log_info("GATE", "Gate opened");
 
@@ -148,72 +153,63 @@ int main()
             *shm_gender_swap = 3;
             sem_v(semId, SEM_SHM_GENDER);
 
-            current_gender = current_gender == MALE ? FEMALE : MALE;
+            current_gender = 0;
 
             log_info("GATE", "Gate forced to change current gender");
 
-            if (pthread_join(id_1, NULL) < 0 || (passenger_num > 1 && pthread_join(id_2, NULL) < 0))
+            while (queue_size(gate_passengers) > 0)
             {
-                log_error("GATE", "Error while joining thread");
-                exit(-1);
+                pthread_t id = dequeue(gate_passengers);
+                pthread_join(id, NULL);
+                pthread_detach(id);
             }
-
-            if (pthread_detach(id_1) < 0 || (passenger_num > 1 & pthread_detach(id_2) < 0))
-            {
-                log_error("GATE", "Error while detaching thread");
-                exit(-1);
-            }
-            passenger_num = 0;
             sem_p(semId, SEM_SHM_PASSENGERS);
             continue;
         }
         sem_v(semId, SEM_SHM_GENDER);
 
-        if (passenger_num == 0)
+        if (queue_size(gate_passengers) == 0)
         {
             current_gender = 0;
         }
 
-        if (passenger_num > 1)
+        if (queue_size(gate_passengers) > 1)
         {
-
-            if (pthread_join(id_1, NULL) < 0 || pthread_join(id_2, NULL) < 0)
+            while (queue_size(gate_passengers) > 0)
             {
-                log_error("GATE", "Error while joining thread");
-                exit(-1);
-            }
-
-            if (pthread_detach(id_1) < 0 || pthread_detach(id_2) < 0)
-            {
-                log_error("GATE", "Error while detaching thread");
-                exit(-1);
+                pthread_t id = dequeue(gate_passengers);
+                pthread_join(id, NULL);
+                pthread_detach(id);
             }
             sem_p(semId, SEM_SHM_PASSENGERS);
             continue;
         }
 
-        sleep(1);
+        custom_sleep(1);
 
-        if (passenger_num > 0)
+        if (queue_size(gate_passengers) > 0)
         {
-            passenger_num++;
-            if (pthread_create(&id_2, NULL, *take_passenger, NULL))
+            pthread_t id;
+            if (pthread_create(&id, NULL, *take_passenger, NULL))
             {
                 log_error("GATE", "Error while creating thread");
                 exit(-1);
             }
+            enqueue(gate_passengers, id);
+
             sem_p(semId, SEM_SHM_PASSENGERS);
             continue;
         }
 
-        passenger_num++;
-        if (pthread_create(&id_1, NULL, *take_passenger, NULL) < 0)
+        pthread_t id;
+        if (pthread_create(&id, NULL, *take_passenger, NULL))
         {
             log_error("GATE", "Error while creating thread");
             exit(-1);
         }
+        enqueue(gate_passengers, id);
 
-        sleep(1);
+        custom_sleep(1);
         sem_p(semId, SEM_SHM_PASSENGERS);
     }
     sem_v(semId, SEM_SHM_PASSENGERS);
