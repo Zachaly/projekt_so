@@ -42,4 +42,8 @@ Napisz programy symulujące działanie kapitana portu, kapitana promu i pasażer
 https://github.com/Zachaly/projekt_so
 
 # Uruchomienie
-Skrypt `compile.sh` służy do kompilacji wszystkich potrzebnych programów, należy uważać z otwieraniem i zapisywaniem tego pliku na Windowsach, nadpisze to końce linii, przez co nazwy plików wynikowych zostaną zniekształcone
+Skrypt `compile.sh` służy do kompilacji wszystkich potrzebnych programów, należy uważać z otwieraniem i zapisywaniem tego pliku na Windowsach, nadpisze to końce linii, przez co nazwy plików wynikowych zostaną zniekształcone.
+
+Przy sklonowaniu repozytorium na linuxie należy ustawić uprawnienia do wykonania dla pliku compile.sh.
+
+W celu zmiany ustawień (ilość pasażerów, promów itd.) należy zmodyfikować plik config.h i zrekompilować programy.
