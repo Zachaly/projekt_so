@@ -321,16 +321,12 @@ int main()
     }
 
     sem_v(SEM_SHM_PASSENGERS);
-    if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, GATE_NUM * 3) < 0 ||
-        semctl(sem_id, SEM_SHM_PASSENGERS, GATE_NUM * 2) < 0)
-    {
-        perror("Semaphore error");
-        exit(-1);
-    }
 
-    free_queue(available_ferries);
+    custom_sleep(3);
 
     log_info("ORCHESTRATOR", "No passengers left");
+
+    free_queue(available_ferries);
 
     for (int i = 0; i < GATE_NUM; i++)
     {
@@ -345,6 +341,14 @@ int main()
     for (int i = 0; i < FERRY_NUM; i++)
     {
         kill(ferry_ids[i], 9);
+    }
+
+    // in case that gate is blocked due to one of these semaphores
+    if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, GATE_NUM * 3) < 0 ||
+        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, GATE_NUM * 2) < 0)
+    {
+        perror("Semaphore error");
+        exit(-1);
     }
 
     if (shmctl(shm_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0 || shmctl(shm_gender_id, IPC_RMID, NULL) < 0 || shmctl(shm_last_gender_id, IPC_RMID, NULL) < 0)

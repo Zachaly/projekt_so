@@ -209,10 +209,10 @@ int main()
         if (ferry_passengers == 0)
         {
             log_info("FERRY", "Ferry didn't take off due to no passengers");
+            kill(getppid(), SIGTERM);
             sem_v(SEM_FERRY_LEFT);
             sem_p(SEM_FERRY_START);
             sem_p(SEM_SHM_PASSENGERS);
-            kill(getppid(), SIGTERM);
             continue;
         }
 
@@ -232,7 +232,6 @@ int main()
 
         sem_p(SEM_SHM_PASSENGERS);
     }
-
     sem_v(SEM_SHM_PASSENGERS);
 
     shmdt(&max_baggage_shm);

@@ -71,6 +71,8 @@ int main()
 
     sem_v(SEM_IPC_PASSENGER_QUEUE);
 
+    while(true);
+
     shmdt(&shm_max_luggage);
 
     return 0;

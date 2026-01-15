@@ -142,7 +142,7 @@ int main()
 
     sem_p(SEM_SHM_PASSENGERS);
     while (*passengers > 0)
-    {
+    {   
         sem_v(SEM_SHM_PASSENGERS);
 
         sem_p(SEM_SHM_GENDER);
@@ -211,6 +211,8 @@ int main()
         sem_p(SEM_SHM_PASSENGERS);
     }
     sem_v(SEM_SHM_PASSENGERS);
+
+    log_info("GATE", "Gate closed");
 
     shmdt(&shm_max_luggage);
     shmdt(&passengers);
