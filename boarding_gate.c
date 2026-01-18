@@ -187,6 +187,7 @@ int main()
     }
     sem_v(SEM_SHM_PASSENGERS);
 
+    free(gate_passengers);
     log_info("GATE", "Gate closed");
 
     shmdt(&shm_max_luggage);

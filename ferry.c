@@ -109,6 +109,8 @@ int main()
     signal(SIGPIPE, sig_handler);
     signal(SIGINT, sig_handler);
 
+    Queue *thread_ids = init_queue();
+
     sem_p(SEM_SHM_PASSENGERS);
     while (*passenger_left_shm > 0)
     {
@@ -173,8 +175,6 @@ int main()
         sem_p(SEM_TAKE_PASSENGERS);
         log_info("FERRY", "Ferry started taking passengers");
 
-        Queue *thread_ids = init_queue();
-
         while (!leave)
         {
             if (queue_size(thread_ids) == GANGWAY_CAP)
@@ -208,8 +208,7 @@ int main()
 
             pthread_detach(id);
         }
-
-        free_queue(thread_ids);
+        
 
         sem_p(SEM_LEAVE_PORT);
         not_in_port = true;
@@ -252,6 +251,8 @@ int main()
         sem_p(SEM_SHM_PASSENGERS);
     }
     sem_v(SEM_SHM_PASSENGERS);
+
+    free_queue(thread_ids);
 
     shmdt(&max_baggage_shm);
     shmdt(&passenger_left_shm);
