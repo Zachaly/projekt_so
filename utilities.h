@@ -19,8 +19,6 @@
 int sem_id;
 char *file_name;
 
-static char time_buffer[100];
-
 void load_sem_id()
 {
     sem_id = atoi(getenv(SEM_ENV));
@@ -77,14 +75,14 @@ void log_info(char *source, char *text)
         exit(-1);
     }
 
+    char time_buffer[50];
+
     strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", local_time);
 
     fprintf(file, "[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
-    fflush(file);
     
     fclose(file);
     printf("[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
-    fflush(stdout);
 
     sem_v(SEM_LOG);
 }
