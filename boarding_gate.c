@@ -26,9 +26,7 @@ void *take_passenger()
 
     struct passenger passenger;
 
-    sem_p(SEM_IPC_PASSENGER_QUEUE);
     int result = msgrcv(ipc_passenger_queue_id, &passenger, sizeof(struct passenger) - sizeof(long int), current_gender, IPC_NOWAIT);
-    sem_v(SEM_IPC_PASSENGER_QUEUE);
 
     pthread_mutex_lock(&mutex);
     if (errno == ENOMSG && current_gender == 0)
@@ -50,7 +48,7 @@ void *take_passenger()
     {
         pthread_mutex_unlock(&mutex);
         sem_v(SEM_FERRY_CAP);
-        log_error("GATE", "IPC error");
+        perror("GATE");
         pthread_exit(0);
         return NULL;
     }
@@ -64,7 +62,7 @@ void *take_passenger()
     {
         *shm_gender_swap = 3;
     }
-    if(current_gender != 0 && current_gender != passenger.mtype && queue_size(gate_passengers) > 0)
+    if (current_gender != 0 && current_gender != passenger.mtype && queue_size(gate_passengers) > 0)
     {
         pthread_t id = dequeue(gate_passengers);
         pthread_join(id, NULL);
@@ -85,7 +83,7 @@ void *take_passenger()
 
     custom_sleep(5);
 
-    pthread_mutex_lock(&mutex);
+    sem_p(SEM_IPC_WAITING_ROOM);
     sem_p(SEM_MAX_LUGGAGE_SHM);
 
     if (passenger.baggage > *shm_max_luggage)
@@ -100,17 +98,15 @@ void *take_passenger()
         sprintf(log_buff, "Passenger %d left the gate", passenger.pid);
 
         log_info("GATE", log_buff);
-        sem_p(SEM_IPC_WAITING_ROOM);
         if (msgsnd(ipc_waiting_room, &passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
         {
-            log_error("GATE", "Failure while writing to ipc");
+            perror("GATE");
             exit(-1);
         }
-        sem_v(SEM_IPC_WAITING_ROOM);
+        sem_v(SEM_IPC_PASSENGER_QUEUE);
     }
+    sem_v(SEM_IPC_WAITING_ROOM);
     sem_v(SEM_MAX_LUGGAGE_SHM);
-
-    pthread_mutex_unlock(&mutex);
 
     pthread_exit(0);
 }
@@ -142,7 +138,7 @@ int main()
 
     sem_p(SEM_SHM_PASSENGERS);
     while (*passengers > 0)
-    {   
+    {
         sem_v(SEM_SHM_PASSENGERS);
 
         sem_p(SEM_SHM_GENDER);
@@ -171,38 +167,17 @@ int main()
             current_gender = 0;
         }
 
-        if (queue_size(gate_passengers) > 1)
+        while (queue_size(gate_passengers) > 1)
         {
-            while (queue_size(gate_passengers) > 0)
-            {
-                pthread_t id = dequeue(gate_passengers);
-                pthread_join(id, NULL);
-                pthread_detach(id);
-            }
-            sem_p(SEM_SHM_PASSENGERS);
-            continue;
-        }
-
-        custom_sleep(1);
-
-        if (queue_size(gate_passengers) > 0)
-        {
-            pthread_t id;
-            if (pthread_create(&id, NULL, *take_passenger, NULL))
-            {
-                log_error("GATE", "Error while creating thread");
-                exit(-1);
-            }
-            enqueue(gate_passengers, id);
-
-            sem_p(SEM_SHM_PASSENGERS);
-            continue;
+            pthread_t id = dequeue(gate_passengers);
+            pthread_join(id, NULL);
+            pthread_detach(id);
         }
 
         pthread_t id;
         if (pthread_create(&id, NULL, *take_passenger, NULL))
         {
-            log_error("GATE", "Error while creating thread");
+            perror("GATE");
             exit(-1);
         }
         enqueue(gate_passengers, id);

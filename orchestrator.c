@@ -8,7 +8,7 @@ void set_env_var(char *name, char *value)
 {
     if (setenv(name, value, 1) < 0)
     {
-        log_error("ORCHESTRATOR", "Failure while creating ipc");
+        perror("ORCHESTRATOR");
         exit(-1);
     }
 }
@@ -34,7 +34,7 @@ void signal_handler(int signum, siginfo_t *info, void *context)
         log_info("ORCHESTRATOR", "Captain said that ferry should leave");
         if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, 0) < 0)
         {
-            log_error("FERRY", "Failed to set semaphore");
+            perror("ORCHESTRATOR");
             exit(-1);
         }
         custom_sleep_break = true;
@@ -44,17 +44,13 @@ void signal_handler(int signum, siginfo_t *info, void *context)
 
 void custom_sleep_interruptable(int seconds)
 {
-    while (seconds > 0)
+    time_t start;
+    time(&start);
+    time_t current;
+    time(&current);
+    while (current - start < seconds && !custom_sleep_break)
     {
-        if (!custom_sleep_break)
-        {
-            custom_sleep(1);
-        }
-        else
-        {
-            break;
-        }
-        seconds--;
+        time(&current);
     }
     custom_sleep_break = false;
 }
@@ -81,7 +77,7 @@ int main()
         exit(-1);
     }
 
-    sem_id = semget(semKey, 13, IPC_CREAT | 0600);
+    sem_id = semget(semKey, 14, IPC_CREAT | 0600);
     if (sem_id < 0)
     {
         perror("Error while creating semaphore");
@@ -94,7 +90,7 @@ int main()
 
     set_env_var(SEM_ENV, strBuff);
 
-    if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, 1) < 0 ||
+    if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, 200) < 0 ||
         semctl(sem_id, SEM_LOG, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_GATE_START, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_TAKE_PASSENGERS, SETVAL, 0) < 0 ||
@@ -104,11 +100,14 @@ int main()
         semctl(sem_id, SEM_FERRY_START, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_SHM_GENDER, SETVAL, 1) < 0 ||
-        semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0)
+        semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
+        semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0)
     {
         perror("Semaphore error");
         exit(-1);
     }
+
+    load_sem_id();
 
     int ipcKey = ftok(".", 'B');
     if (ipcKey < 0)
@@ -121,7 +120,7 @@ int main()
 
     if (ipcId < 0)
     {
-        log_error("ORCHESTRATOR", "Failure while creating ipc");
+        perror("ORCHESTRATOR");
         exit(-1);
     }
 
@@ -140,7 +139,7 @@ int main()
 
     if (ipc_wainting_room < 0)
     {
-        log_error("ORCHESTRATOR", "Failure while creating ipc");
+        perror("ORCHESTRATOR");
         exit(-1);
     }
 
@@ -158,7 +157,7 @@ int main()
     int shm_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
     if (shm_id < 0)
     {
-        log_error("ORCHESTRATOR", "Failure while creating shm");
+        perror("ORCHESTRATOR");
         exit(-1);
     }
 
@@ -176,7 +175,7 @@ int main()
     int shm_passengers_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
     if (shm_passengers_id < 0)
     {
-        log_error("ORCHESTRATOR", "Failure while creating shm");
+        perror("ORCHESTRATOR");
         exit(-1);
     }
 
@@ -196,7 +195,7 @@ int main()
     int shm_gender_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
     if (shm_gender_id < 0)
     {
-        log_error("ORCHESTRATOR", "Failure while creating shm");
+        perror("ORCHESTRATOR");
         exit(-1);
     }
 
@@ -218,7 +217,7 @@ int main()
     int shm_last_gender_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
     if (shm_last_gender_id < 0)
     {
-        log_error("ORCHESTRATOR", "Failure while creating shm");
+        perror("ORCHESTRATOR");
         exit(-1);
     }
 
@@ -290,16 +289,14 @@ int main()
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
 
-    sem_p(SEM_SHM_PASSENGERS);
     while (*passengers_left > 0)
     {
         sprintf(strBuff, "%d passengers left", *passengers_left);
         log_info("ORCHESTRATOR", strBuff);
         sem_v(SEM_SHM_PASSENGERS);
 
-        if (queue_size(available_ferries) < 1)
+        while(queue_size(available_ferries) < 1)
         {
-            pause();
             continue;
         }
         current_ferry = dequeue(available_ferries);
@@ -307,10 +304,14 @@ int main()
 
         kill(current_ferry, SIGSYS);
 
-        semctl(sem_id, SEM_GATE_START, SETVAL, GATE_NUM);
+        sem_p(SEM_FERRY_CAN_LEAVE);
 
-        custom_sleep_interruptable(FERRY_START_TAKING_PASSENGERS_TIME + FERRY_WAIT_FOR_PASSENGERS_TIME);
+        custom_sleep_interruptable(FERRY_START_TAKING_PASSENGERS_TIME);
 
+        sem_v(SEM_TAKE_PASSENGERS);
+
+        custom_sleep_interruptable(FERRY_WAIT_FOR_PASSENGERS_TIME);
+        
         sem_v(SEM_LEAVE_PORT);
 
         kill(current_ferry, SIGPIPE);

@@ -45,6 +45,7 @@ void *gangway()
     custom_sleep(5);
     sprintf(buff, "Passenger %d arrived at ferry", passenger.pid);
     log_info("FERRY", buff);
+    kill(passenger.pid, SIGPIPE);
 
     pthread_mutex_lock(&mutex);
     ferry_passengers++;
@@ -124,16 +125,13 @@ int main()
         sem_p(SEM_IPC_WAITING_ROOM);
         struct msqid_ds queue_data;
         msgctl(ipc_waiting_room_id, IPC_STAT, &queue_data);
-        sem_v(SEM_IPC_WAITING_ROOM);
 
         int count = queue_data.msg_qnum;
 
         while (count < FERRY_CAPACITY)
         {
             struct passenger passenger;
-            sem_p(SEM_IPC_PASSENGER_QUEUE);
             int res = msgrcv(ipc_passengers_id, &passenger, sizeof(struct passenger) - sizeof(long int), 3, IPC_NOWAIT);
-            sem_v(SEM_IPC_PASSENGER_QUEUE);
             if (res < 0)
             {
                 break;
@@ -142,20 +140,19 @@ int main()
             sprintf(buff, "Passenger %d skipped queue and added to waiting room as VIP", passenger.pid);
             log_info("FERRY", buff);
 
-            sem_p(SEM_IPC_WAITING_ROOM);
             if (msgsnd(ipc_waiting_room_id, (struct passenger *)&passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
             {
                 perror("Ipc fail");
                 exit(-1);
             }
-            sem_v(SEM_IPC_WAITING_ROOM);
             custom_sleep(1);
             count++;
         }
 
+        int cap = FERRY_CAPACITY - count;
         if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, FERRY_CAPACITY - count) < 0)
         {
-            log_error("FERRY", "FERRY");
+            perror("FERRY");
             exit(-1);
         }
 
@@ -163,8 +160,17 @@ int main()
         *max_baggage_shm = max_baggage;
         sem_v(SEM_MAX_LUGGAGE_SHM);
 
+        if (cap > 0)
+        {
+            semctl(sem_id, SEM_GATE_START, SETVAL, GATE_NUM);
+        }
+        sem_v(SEM_IPC_WAITING_ROOM);
+
         custom_sleep(FERRY_START_TAKING_PASSENGERS_TIME);
 
+        sem_v(SEM_FERRY_CAN_LEAVE);
+
+        sem_p(SEM_TAKE_PASSENGERS);
         log_info("FERRY", "Ferry started taking passengers");
 
         Queue *thread_ids = init_queue();
@@ -188,6 +194,8 @@ int main()
             custom_sleep(2);
         }
 
+        semctl(sem_id, SEM_FERRY_CAP, SETVAL, 0);
+
         while (queue_size(thread_ids) > 0)
         {
             pthread_t id = dequeue(thread_ids);
@@ -209,6 +217,17 @@ int main()
         if (ferry_passengers == 0)
         {
             log_info("FERRY", "Ferry didn't take off due to no passengers");
+
+            struct msqid_ds queue_data;
+            msgctl(ipc_passengers_id, IPC_STAT, &queue_data);
+
+            int count = queue_data.msg_qnum;
+
+            if (count == 0)
+            {
+                semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, 200);
+            }
+
             kill(getppid(), SIGTERM);
             sem_v(SEM_FERRY_LEFT);
             sem_p(SEM_FERRY_START);
