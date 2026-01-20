@@ -24,8 +24,6 @@ void cleanup()
 {
     free_queue(available_ferries);
 
-    *passengers_left = 0;
-
     int s;
 
     for (int i = 0; i < GATE_NUM; i++)
@@ -87,7 +85,9 @@ void signal_handler(int signum, siginfo_t *info, void *context)
     if (signum == SIGTERM)
     {
         pid_t id = info->si_pid;
+        sem_p(SEM_QUEUE_FERRIES);
         enqueue(available_ferries, id);
+        sem_v(SEM_QUEUE_FERRIES);
         sprintf(strBuff, "Ferry %d returned from course", id);
         log_info("ORCHESTRATOR", strBuff);
     }
@@ -164,7 +164,8 @@ int main()
         semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_SHM_GENDER, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0)
+        semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0
+        semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0)
     {
         perror("Semaphore error");
         exit(-1);
@@ -364,7 +365,9 @@ int main()
         {
             continue;
         }
+        sem_p(SEM_QUEUE_FERRIES);
         current_ferry = dequeue(available_ferries);
+        sem_v(SEM_QUEUE_FERRIES);
         forced_ferry_leave = false;
 
         kill(current_ferry, SIGSYS);

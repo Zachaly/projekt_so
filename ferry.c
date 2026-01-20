@@ -258,10 +258,8 @@ int main()
             continue;
         }
 
-        char buff[100];
-        sprintf(buff, "Ferry started course");
         sem_p(SEM_FERRY_START);
-        log_info("FERRY", buff);
+        log_info("FERRY", "Ferry started course");
         sem_v(SEM_FERRY_LEFT);
 
         custom_sleep(course_time);

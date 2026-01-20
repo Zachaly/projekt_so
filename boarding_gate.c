@@ -211,6 +211,7 @@ int main()
 
     free_queue(gate_passengers);
     log_info("GATE", "Gate closed");
+    pthread_mutex_destroy(&mutex);
 
     shmdt(&shm_max_luggage);
     shmdt(&passengers);
