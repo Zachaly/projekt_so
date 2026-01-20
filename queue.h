@@ -1,15 +1,16 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-typedef struct queue {
-	int* arr;
+typedef struct queue
+{
+	int *arr;
 	int tail;
 	size_t element_size;
 } Queue;
 
-Queue* init_queue()
+Queue *init_queue()
 {
-	Queue* queue = malloc(sizeof(Queue));
+	Queue *queue = malloc(sizeof(Queue));
 
 	queue->arr = NULL;
 	queue->tail = -1;
@@ -18,21 +19,21 @@ Queue* init_queue()
 	return queue;
 }
 
-static void realloc_arr(Queue* queue)
+static void realloc_arr(Queue *queue)
 {
-	void* temp = realloc(queue->arr, queue->element_size * (queue->tail + 1));
+	void *temp = realloc(queue->arr, queue->element_size * (queue->tail + 1));
 
 	queue->arr = temp;
 }
 
-void enqueue(Queue* queue, int val)
+void enqueue(Queue *queue, int val)
 {
 	queue->tail++;
 	realloc_arr(queue);
 	queue->arr[queue->tail] = val;
 }
 
-int dequeue(Queue* queue)
+int dequeue(Queue *queue)
 {
 	int val = queue->arr[0];
 
@@ -49,16 +50,25 @@ int dequeue(Queue* queue)
 	{
 		realloc_arr(queue);
 	}
-	
+
 	return val;
 }
 
-int queue_size(Queue* queue) {
+int queue_size(Queue *queue)
+{
 	return queue->tail + 1;
 }
 
-void free_queue(Queue* queue)
+void free_queue(Queue *queue)
 {
-	free(queue->arr);
+	if (queue)
+	{
+		return;
+	}
+
+	if (queue->arr)
+	{
+		free(queue->arr);
+	}
 	free(queue);
 }

@@ -388,6 +388,8 @@ int main()
 
     sem_v(SEM_SHM_PASSENGERS);
 
+    shmdt(&passengers_left);
+
     custom_sleep(3);
 
     log_info("ORCHESTRATOR", "No passengers left");

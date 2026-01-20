@@ -62,6 +62,14 @@ int queue_size(Queue *queue)
 
 void free_queue(Queue *queue)
 {
-    free(queue->arr);
+    if (!queue)
+    {
+        return;
+    }
+
+    if (queue->arr)
+    {
+        free(queue->arr);
+    }
     free(queue);
 }
