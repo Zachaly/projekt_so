@@ -49,11 +49,6 @@ int dequeue(Queue* queue)
 	{
 		realloc_arr(queue);
 	}
-	else
-	{
-		free(queue->arr);
-		queue->arr = NULL;
-	}
 	
 	return val;
 }

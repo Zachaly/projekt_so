@@ -134,9 +134,14 @@ int main()
         {
             struct passenger passenger;
             int res = msgrcv(ipc_passengers_id, &passenger, sizeof(struct passenger) - sizeof(long int), 3, IPC_NOWAIT);
-            if (res < 0)
+            if (res < 0 && errno == ENOMSG)
             {
                 break;
+            }
+            else if(res < 0)
+            {
+                perror("FERRY");
+                exit(-1);
             }
 
             sprintf(buff, "Passenger %d skipped queue and added to waiting room as VIP", passenger.pid);
@@ -164,7 +169,11 @@ int main()
 
         if (cap > 0)
         {
-            semctl(sem_id, SEM_GATE_START, SETVAL, GATE_NUM);
+            if (semctl(sem_id, SEM_GATE_START, SETVAL, GATE_NUM) < 0)
+            {
+                perror("FERRY");
+                exit(-1);
+            }
         }
         sem_v(SEM_IPC_WAITING_ROOM);
 
@@ -181,8 +190,16 @@ int main()
             {
                 pthread_t id = dequeue(thread_ids);
 
-                pthread_join(id, NULL);
-                pthread_detach(id);
+                if (pthread_join(id, NULL) < 0)
+                {
+                    perror("FERRY");
+                    exit(-1);
+                }
+                if (pthread_detach(id) < 0)
+                {
+                    perror("FERRY");
+                    exit(-1);
+                }
             }
 
             pthread_t thread_id;
@@ -206,9 +223,12 @@ int main()
                 continue;
             }
 
-            pthread_detach(id);
+            if (pthread_detach(id) < 0)
+            {
+                perror("FERRY");
+                exit(-1);
+            }
         }
-        
 
         sem_p(SEM_LEAVE_PORT);
         not_in_port = true;
@@ -224,7 +244,11 @@ int main()
 
             if (count == 0)
             {
-                semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, 200);
+                if(semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, 200) < 0)
+                {
+                    perror("FERRY");
+                    exit(-1);
+                }
             }
 
             kill(getppid(), SIGTERM);

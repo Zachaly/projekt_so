@@ -2,6 +2,7 @@
 #include "structures.h"
 #include <signal.h>
 #include <stdbool.h>
+#include <sys/wait.h>
 
 int random_number(int min, int max);
 

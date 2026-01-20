@@ -4,6 +4,75 @@
 #include <stdbool.h>
 #include "queue.h"
 
+Queue *available_ferries;
+bool custom_sleep_break = false;
+bool forced_ferry_leave = false;
+int current_ferry;
+int *passengers_left;
+char strBuff[100];
+pid_t passenger_ids[PASSENGERS_NUMBER];
+pid_t gates[GATE_NUM];
+pid_t ferry_ids[FERRY_NUM];
+int ipc_passengers_id;
+int ipc_wainting_room;
+int shm_gender_swap_id;
+int shm_passengers_id;
+int shm_last_gender_id;
+int shm_gender_id;
+
+void cleanup()
+{
+    free_queue(available_ferries);
+
+    *passengers_left = 0;
+
+    int s;
+
+    for (int i = 0; i < GATE_NUM; i++)
+    {
+        waitpid(gates[i], &s, 0);
+    }
+
+    for (int i = 0; i < PASSENGERS_NUMBER; i++)
+    {
+        kill(passenger_ids[i], SIGINT);
+        waitpid(passenger_ids[i], &s, 0);
+    }
+
+    for (int i = 0; i < FERRY_NUM; i++)
+    {
+        waitpid(ferry_ids[i], &s, 0);
+    }
+
+    // in case that gate is blocked due to one of these semaphores
+    if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, GATE_NUM * 3) < 0 ||
+        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, GATE_NUM * 2) < 0)
+    {
+        perror("Semaphore error");
+        exit(-1);
+    }
+
+    if (shmctl(shm_gender_swap_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0 || shmctl(shm_gender_id, IPC_RMID, NULL) < 0 || shmctl(shm_last_gender_id, IPC_RMID, NULL) < 0)
+    {
+        perror("Failed to delete shm");
+        exit(-1);
+    }
+
+    if (msgctl(ipc_passengers_id, IPC_RMID, NULL) < 0 || msgctl(ipc_wainting_room, IPC_RMID, NULL) < 0)
+    {
+        perror("Failed to delete ipc");
+        exit(-1);
+    }
+
+    if (semctl(sem_id, 0, IPC_RMID) < 0)
+    {
+        perror("Failed to delete semaphores");
+        exit(-1);
+    }
+
+    printf("Cleanup ended\n");
+}
+
 void set_env_var(char *name, char *value)
 {
     if (setenv(name, value, 1) < 0)
@@ -12,13 +81,6 @@ void set_env_var(char *name, char *value)
         exit(-1);
     }
 }
-
-Queue *available_ferries;
-bool custom_sleep_break = false;
-bool forced_ferry_leave = false;
-int current_ferry;
-int *passengers_left;
-char strBuff[100];
 
 void signal_handler(int signum, siginfo_t *info, void *context)
 {
@@ -35,6 +97,7 @@ void signal_handler(int signum, siginfo_t *info, void *context)
         if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, 0) < 0)
         {
             perror("ORCHESTRATOR");
+            cleanup();
             exit(-1);
         }
         custom_sleep_break = true;
@@ -77,7 +140,7 @@ int main()
         exit(-1);
     }
 
-    sem_id = semget(semKey, 14, IPC_CREAT | 0600);
+    sem_id = semget(semKey, 15, IPC_CREAT | 0600);
     if (sem_id < 0)
     {
         perror("Error while creating semaphore");
@@ -116,15 +179,15 @@ int main()
         exit(-1);
     }
 
-    int ipcId = msgget(ipcKey, IPC_CREAT | 0600);
+    ipc_passengers_id = msgget(ipcKey, IPC_CREAT | 0600);
 
-    if (ipcId < 0)
+    if (ipc_passengers_id < 0)
     {
         perror("ORCHESTRATOR");
         exit(-1);
     }
 
-    sprintf(strBuff, "%d", ipcId);
+    sprintf(strBuff, "%d", ipc_passengers_id);
 
     set_env_var(IPC_PASSENGER_QUEUE_ENV, strBuff);
 
@@ -135,7 +198,7 @@ int main()
         exit(-1);
     }
 
-    int ipc_wainting_room = msgget(ipcKey, IPC_CREAT | 0600);
+    ipc_wainting_room = msgget(ipcKey, IPC_CREAT | 0600);
 
     if (ipc_wainting_room < 0)
     {
@@ -154,14 +217,14 @@ int main()
         exit(-1);
     }
 
-    int shm_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
-    if (shm_id < 0)
+    shm_gender_swap_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
+    if (shm_gender_swap_id < 0)
     {
         perror("ORCHESTRATOR");
         exit(-1);
     }
 
-    sprintf(strBuff, "%d", shm_id);
+    sprintf(strBuff, "%d", shm_gender_swap_id);
 
     set_env_var(SHM_LUGGAGE_ENV, strBuff);
 
@@ -172,7 +235,7 @@ int main()
         exit(-1);
     }
 
-    int shm_passengers_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
+    shm_passengers_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
     if (shm_passengers_id < 0)
     {
         perror("ORCHESTRATOR");
@@ -192,7 +255,7 @@ int main()
         exit(-1);
     }
 
-    int shm_gender_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
+    shm_gender_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
     if (shm_gender_id < 0)
     {
         perror("ORCHESTRATOR");
@@ -214,7 +277,7 @@ int main()
         exit(-1);
     }
 
-    int shm_last_gender_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
+    shm_last_gender_id = shmget(shm_key, sizeof(int), IPC_CREAT | 0600);
     if (shm_last_gender_id < 0)
     {
         perror("ORCHESTRATOR");
@@ -227,7 +290,6 @@ int main()
 
     available_ferries = init_queue();
 
-    int ferry_ids[FERRY_NUM];
     for (int i = 0; i < FERRY_NUM; i++)
     {
         int id = fork();
@@ -235,11 +297,12 @@ int main()
         {
         case -1:
             perror("Fork error");
+            cleanup();
             exit(-1);
             break;
         case 0:
             execl("ferry.out", "", NULL);
-            exit(0);
+            cleanup();
             break;
         }
         ferry_ids[i] = id;
@@ -247,7 +310,6 @@ int main()
         custom_sleep(1);
     }
 
-    int passenger_ids[PASSENGERS_NUMBER];
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         int id = fork();
@@ -255,10 +317,12 @@ int main()
         {
         case -1:
             perror("Fork error");
+            cleanup();
             exit(-1);
             break;
         case 0:
             execl("passenger.out", "", NULL);
+            cleanup();
             exit(0);
             break;
         }
@@ -266,18 +330,19 @@ int main()
         custom_sleep(1);
     }
 
-    int gates[GATE_NUM];
     for (int i = 0; i < GATE_NUM; i++)
     {
         int id = fork();
         if (id < 0)
         {
             perror("Fork error");
+            cleanup();
             exit(-1);
         }
         else if (id == 0)
         {
             execl("boarding_gate.out", "", NULL);
+            cleanup();
             exit(0);
         }
         gates[i] = id;
@@ -295,7 +360,7 @@ int main()
         log_info("ORCHESTRATOR", strBuff);
         sem_v(SEM_SHM_PASSENGERS);
 
-        while(queue_size(available_ferries) < 1)
+        while (queue_size(available_ferries) < 1)
         {
             continue;
         }
@@ -311,7 +376,7 @@ int main()
         sem_v(SEM_TAKE_PASSENGERS);
 
         custom_sleep_interruptable(FERRY_WAIT_FOR_PASSENGERS_TIME);
-        
+
         sem_v(SEM_LEAVE_PORT);
 
         kill(current_ferry, SIGPIPE);
@@ -327,50 +392,7 @@ int main()
 
     log_info("ORCHESTRATOR", "No passengers left");
 
-    free_queue(available_ferries);
-
-    for (int i = 0; i < GATE_NUM; i++)
-    {
-        kill(gates[i], 9);
-    }
-
-    for (int i = 0; i < PASSENGERS_NUMBER; i++)
-    {
-        kill(passenger_ids[i], 9);
-    }
-
-    for (int i = 0; i < FERRY_NUM; i++)
-    {
-        kill(ferry_ids[i], 9);
-    }
-
-    // in case that gate is blocked due to one of these semaphores
-    if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, GATE_NUM * 3) < 0 ||
-        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, GATE_NUM * 2) < 0)
-    {
-        perror("Semaphore error");
-        exit(-1);
-    }
-
-    if (shmctl(shm_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0 || shmctl(shm_gender_id, IPC_RMID, NULL) < 0 || shmctl(shm_last_gender_id, IPC_RMID, NULL) < 0)
-    {
-        perror("Failed to delete shm");
-        exit(-1);
-    }
-
-    if (msgctl(ipcId, IPC_RMID, NULL) < 0 || msgctl(ipc_wainting_room, IPC_RMID, NULL) < 0)
-    {
-        perror("Failed to delete ipc");
-        exit(-1);
-    }
-
-    if (semctl(sem_id, 0, IPC_RMID) < 0)
-    {
-        perror("Failed to delete semaphores");
-        exit(-1);
-    }
-
-    printf("Cleanup ended\n");
+    cleanup();
 
     return 0;
 }

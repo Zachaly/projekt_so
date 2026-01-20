@@ -65,8 +65,16 @@ void *take_passenger()
     if (current_gender != 0 && current_gender != passenger.mtype && queue_size(gate_passengers) > 0)
     {
         pthread_t id = dequeue(gate_passengers);
-        pthread_join(id, NULL);
-        pthread_detach(id);
+        if (pthread_join(id, NULL) < 0)
+        {
+            perror("GATE");
+            exit(-1);
+        }
+        if (pthread_detach(id) < 0)
+        {
+            perror("GATE");
+            exit(-1);
+        }
     }
 
     *shm_last_gender = passenger.mtype;
@@ -154,8 +162,15 @@ int main()
             while (queue_size(gate_passengers) > 0)
             {
                 pthread_t id = dequeue(gate_passengers);
-                pthread_join(id, NULL);
-                pthread_detach(id);
+                if (pthread_join(id, NULL) < 0)
+                {
+                    continue;
+                }
+                if (pthread_detach(id) < 0)
+                {
+                    perror("GATE");
+                    exit(-1);
+                }
             }
             sem_p(SEM_SHM_PASSENGERS);
             continue;
@@ -170,8 +185,15 @@ int main()
         while (queue_size(gate_passengers) > 1)
         {
             pthread_t id = dequeue(gate_passengers);
-            pthread_join(id, NULL);
-            pthread_detach(id);
+            if (pthread_join(id, NULL) < 0)
+            {
+                continue;
+            }
+            if (pthread_detach(id) < 0)
+            {
+                perror("GATE");
+                exit(-1);
+            }
         }
 
         pthread_t id;
