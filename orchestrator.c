@@ -164,7 +164,8 @@ int main()
         semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_SHM_GENDER, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0 semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0)
+        semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0 ||
+        semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0)
     {
         perror("Semaphore error");
         exit(-1);
