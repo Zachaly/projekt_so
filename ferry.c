@@ -18,6 +18,7 @@ int last_passengers = 0;
 int course_time;
 pthread_mutex_t mutex;
 bool not_in_port = true;
+bool stop = false;
 
 void *gangway()
 {
@@ -78,6 +79,11 @@ void sig_handler(int signum)
     {
         leave_port();
     }
+    if (signum == SIGTERM)
+    {
+        stop = true;
+        not_in_port = false;
+    }
 }
 
 int main()
@@ -108,6 +114,7 @@ int main()
     signal(SIGSYS, sig_handler);
     signal(SIGPIPE, sig_handler);
     signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
 
     Queue *thread_ids = init_queue();
 
@@ -118,6 +125,11 @@ int main()
 
         while (not_in_port)
             ;
+
+        if (stop)
+        {
+            break;
+        }
 
         leave = false;
         ferry_passengers = 0;
@@ -138,7 +150,7 @@ int main()
             {
                 break;
             }
-            else if(res < 0)
+            else if (res < 0)
             {
                 perror("FERRY");
                 exit(-1);
@@ -244,7 +256,7 @@ int main()
 
             if (count == 0)
             {
-                if(semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, 200) < 0)
+                if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, PASSENGERS_QUEUE_SIZE) < 0)
                 {
                     perror("FERRY");
                     exit(-1);

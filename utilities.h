@@ -95,7 +95,7 @@ int random_number(int min, int max)
 
 void custom_sleep(int t)
 {
-    // return;
+     return;
     time_t start;
     time(&start);
 
