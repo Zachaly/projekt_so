@@ -195,6 +195,12 @@ int main()
 
         custom_sleep(FERRY_START_TAKING_PASSENGERS_TIME);
 
+        if(semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0)
+        {
+            perror("FERRY");
+            exit(-1);
+        }
+
         sem_v(SEM_FERRY_CAN_LEAVE);
 
         sem_p(SEM_TAKE_PASSENGERS);
@@ -223,6 +229,8 @@ int main()
             pthread_create(&thread_id, NULL, *gangway, NULL);
 
             enqueue(thread_ids, thread_id);
+
+            sem_v(SEM_PEOPLE_AT_GANGWAY);
 
             custom_sleep(2);
         }

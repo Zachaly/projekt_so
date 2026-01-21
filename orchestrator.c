@@ -3,6 +3,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include "queue.h"
+#include <pthread.h>
 
 Queue *available_ferries;
 bool custom_sleep_break = false;
@@ -13,6 +14,7 @@ char strBuff[100];
 pid_t passenger_ids[PASSENGERS_NUMBER];
 pid_t gates[GATE_NUM];
 pid_t ferry_ids[FERRY_NUM];
+pthread_t passenger_threads[PASSENGERS_NUMBER];
 int ipc_passengers_id;
 int ipc_wainting_room;
 int shm_gender_swap_id;
@@ -41,7 +43,18 @@ void cleanup()
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         kill(passenger_ids[i], SIGPIPE);
-        waitpid(passenger_ids[i], &s, 0);
+        
+        if(pthread_join(passenger_threads[i], NULL) < 0)
+        {
+            perror("ORCHESTRATOR");
+            exit(-1);
+        }
+
+        if(pthread_detach(passenger_threads[i]) < 0)
+        {
+            perror("ORCHESTRATOR");
+            exit(-1);
+        }
     }
 
     for (int i = 0; i < FERRY_NUM; i++)
@@ -118,6 +131,14 @@ void custom_sleep_interruptable(int seconds)
     custom_sleep_break = false;
 }
 
+void* wait_passenger(void* _arg)
+{
+    pid_t pid = *(pid_t *)_arg;
+    int s;
+    waitpid(pid, &s, 0);
+    pthread_exit(0);
+}
+
 int main()
 {
     char log_file_buff[100];
@@ -140,7 +161,7 @@ int main()
         exit(-1);
     }
 
-    sem_id = semget(semKey, 15, IPC_CREAT | 0600);
+    sem_id = semget(semKey, 16, IPC_CREAT | 0600);
     if (sem_id < 0)
     {
         perror("Error while creating semaphore");
@@ -165,6 +186,7 @@ int main()
         semctl(sem_id, SEM_SHM_GENDER, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0 ||
+        semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0)
     {
         perror("Semaphore error");
@@ -328,6 +350,18 @@ int main()
             break;
         }
         passenger_ids[i] = id;
+
+        pthread_t thread;
+
+        if(pthread_create(&thread, NULL, wait_passenger, &id) < 0)
+        {
+            perror("ORCHESTRATOR");
+            cleanup();
+            exit(-1);
+        }
+
+        passenger_threads[i] = thread;
+
         custom_sleep(1);
     }
 
@@ -354,6 +388,7 @@ int main()
     sa.sa_flags = SA_SIGINFO;
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGPIPE, &sa, NULL);
 
     bool last_passengers = false;
 
@@ -394,6 +429,8 @@ int main()
         sem_v(SEM_TAKE_PASSENGERS);
 
         custom_sleep_interruptable(FERRY_WAIT_FOR_PASSENGERS_TIME);
+
+        sem_p(SEM_PEOPLE_AT_GANGWAY);
 
         sem_v(SEM_LEAVE_PORT);
 
