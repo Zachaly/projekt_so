@@ -48,6 +48,10 @@ void *gangway()
     log_info("FERRY", buff);
     kill(passenger.pid, SIGPIPE);
 
+    sem_p(SEM_SHM_PASSENGERS);
+    *passenger_left_shm -= 1;
+    sem_v(SEM_SHM_PASSENGERS);
+
     pthread_mutex_lock(&mutex);
     ferry_passengers++;
     pthread_mutex_unlock(&mutex);
@@ -275,10 +279,6 @@ int main()
         sem_v(SEM_FERRY_LEFT);
 
         custom_sleep(course_time);
-
-        sem_p(SEM_SHM_PASSENGERS);
-        *passenger_left_shm -= ferry_passengers;
-        sem_v(SEM_SHM_PASSENGERS);
 
         kill(getppid(), SIGTERM);
 
