@@ -153,7 +153,7 @@ int main()
 
     set_env_var(SEM_ENV, strBuff);
 
-    if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, 200) < 0 ||
+    if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, PASSENGERS_QUEUE_SIZE) < 0 ||
         semctl(sem_id, SEM_LOG, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_GATE_START, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_TAKE_PASSENGERS, SETVAL, 0) < 0 ||
@@ -164,8 +164,7 @@ int main()
         semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_SHM_GENDER, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0
-        semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0)
+        semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0 semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0)
     {
         perror("Semaphore error");
         exit(-1);
@@ -355,8 +354,23 @@ int main()
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
 
+    bool last_passengers = false;
+
     while (*passengers_left > 0)
     {
+        if (!last_passengers && *passengers_left < PASSENGERS_QUEUE_SIZE)
+        {
+            if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, PASSENGERS_QUEUE_SIZE) < 0)
+            {
+                *passengers_left = 0;
+                sem_v(SEM_SHM_PASSENGERS);
+                cleanup();
+                exit(-1);
+            }
+
+            last_passengers = true;
+        }
+
         sprintf(strBuff, "%d passengers left", *passengers_left);
         log_info("ORCHESTRATOR", strBuff);
         sem_v(SEM_SHM_PASSENGERS);

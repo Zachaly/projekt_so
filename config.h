@@ -10,6 +10,7 @@
 #define MAX_BAGGAGE_LIMIT 15
 #define MAX_COURSE_TIME 60
 #define MIN_COURSE_TIME 40
+#define PASSENGERS_QUEUE_SIZE 250
 
 #define VIP_CHANCE 100 // 10% <-> 100
 #define MALE_CHANCE 200 // 50% <-> 500
