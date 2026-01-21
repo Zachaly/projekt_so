@@ -14,13 +14,13 @@ char strBuff[100];
 pid_t passenger_ids[PASSENGERS_NUMBER];
 pid_t gates[GATE_NUM];
 pid_t ferry_ids[FERRY_NUM];
-pthread_t passenger_threads[PASSENGERS_NUMBER];
 int ipc_passengers_id;
 int ipc_wainting_room;
 int shm_gender_swap_id;
 int shm_passengers_id;
 int shm_last_gender_id;
 int shm_gender_id;
+pthread_t passenger_thread;
 
 void cleanup()
 {
@@ -43,18 +43,18 @@ void cleanup()
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         kill(passenger_ids[i], SIGPIPE);
-        
-        if(pthread_join(passenger_threads[i], NULL) < 0)
-        {
-            perror("ORCHESTRATOR");
-            exit(-1);
-        }
+    }
 
-        if(pthread_detach(passenger_threads[i]) < 0)
-        {
-            perror("ORCHESTRATOR");
-            exit(-1);
-        }
+    if (pthread_join(passenger_thread, NULL) < 0)
+    {
+        perror("ORCHESTRATOR");
+        exit(-1);
+    }
+
+    if (pthread_detach(passenger_thread) < 0)
+    {
+        perror("ORCHESTRATOR");
+        exit(-1);
     }
 
     for (int i = 0; i < FERRY_NUM; i++)
@@ -131,11 +131,25 @@ void custom_sleep_interruptable(int seconds)
     custom_sleep_break = false;
 }
 
-void* wait_passenger(void* _arg)
+void *wait_passengers()
 {
-    pid_t pid = *(pid_t *)_arg;
     int s;
-    waitpid(pid, &s, 0);
+
+    int ended = 0;
+    int i = 0;
+    while (ended < PASSENGERS_NUMBER)
+    {
+        pid_t pid = passenger_ids[i];
+        if (pid == waitpid(pid, &s, WNOHANG))
+        {
+            ended++;
+        }
+        i++;
+        if (i >= PASSENGERS_NUMBER)
+        {
+            i = 0;
+        }
+    }
     pthread_exit(0);
 }
 
@@ -351,18 +365,14 @@ int main()
         }
         passenger_ids[i] = id;
 
-        pthread_t thread;
-
-        if(pthread_create(&thread, NULL, wait_passenger, &id) < 0)
-        {
-            perror("ORCHESTRATOR");
-            cleanup();
-            exit(-1);
-        }
-
-        passenger_threads[i] = thread;
-
         custom_sleep(1);
+    }
+
+    if (pthread_create(&passenger_thread, NULL, wait_passengers, NULL) < 0)
+    {
+        perror("ORCHESTRATOR");
+        cleanup();
+        exit(-1);
     }
 
     for (int i = 0; i < GATE_NUM; i++)
