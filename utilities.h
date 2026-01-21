@@ -63,7 +63,8 @@ void sem_v(int sem_num)
 void log_info(char *source, char *text)
 {
     time_t now = time(NULL);
-    struct tm *local_time = localtime(&now);
+    struct tm local_time;
+    localtime_r(&now, &local_time);
 
     sem_p(SEM_LOG);
 
@@ -77,10 +78,10 @@ void log_info(char *source, char *text)
 
     char time_buffer[50];
 
-    strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", local_time);
+    strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", &local_time);
 
     fprintf(file, "[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
-    
+
     fclose(file);
     printf("[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
 
@@ -94,7 +95,7 @@ int random_number(int min, int max)
 
 void custom_sleep(int t)
 {
-    //return;
+    // return;
     time_t start;
     time(&start);
 
