@@ -21,6 +21,7 @@ int shm_passengers_id;
 int shm_last_gender_id;
 int shm_gender_id;
 pthread_t passenger_thread;
+Queue *passengers;
 
 void cleanup()
 {
@@ -135,21 +136,17 @@ void *wait_passengers()
 {
     int s;
 
-    int ended = 0;
-    int i = 0;
-    while (ended < PASSENGERS_NUMBER)
+    while (queue_size(passengers) > 0)
     {
-        pid_t pid = passenger_ids[i];
-        if (pid == waitpid(pid, &s, WNOHANG))
+        pid_t pid = dequeue(passengers);
+        if (pid != waitpid(pid, &s, WNOHANG))
         {
-            ended++;
-        }
-        i++;
-        if (i >= PASSENGERS_NUMBER)
-        {
-            i = 0;
+            enqueue(passengers, pid);
         }
     }
+
+    free_queue(passengers);
+
     pthread_exit(0);
 }
 
@@ -347,6 +344,8 @@ int main()
         custom_sleep(1);
     }
 
+    passengers = init_queue();
+
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         int id = fork();
@@ -364,6 +363,7 @@ int main()
             break;
         }
         passenger_ids[i] = id;
+        enqueue(passengers, id);
 
         custom_sleep(1);
     }
