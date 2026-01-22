@@ -40,6 +40,7 @@ void *gangway()
     }
 
     sprintf(buff, "Passenger %d arrived at gangway", passenger.pid);
+    sem_v(SEM_PEOPLE_AT_GANGWAY);
 
     log_info("FERRY", buff);
 
@@ -122,7 +123,7 @@ int main()
 
     Queue *thread_ids = init_queue();
 
-    sem_p(SEM_SHM_PASSENGERS);
+    //sem_p(SEM_SHM_PASSENGERS);
     while (*passenger_left_shm > 0)
     {
         sem_v(SEM_SHM_PASSENGERS);
@@ -195,7 +196,7 @@ int main()
 
         custom_sleep(FERRY_START_TAKING_PASSENGERS_TIME);
 
-        if(semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0)
+        if (semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0)
         {
             perror("FERRY");
             exit(-1);
@@ -229,8 +230,6 @@ int main()
             pthread_create(&thread_id, NULL, *gangway, NULL);
 
             enqueue(thread_ids, thread_id);
-
-            sem_v(SEM_PEOPLE_AT_GANGWAY);
 
             custom_sleep(2);
         }

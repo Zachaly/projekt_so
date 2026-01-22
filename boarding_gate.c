@@ -22,8 +22,6 @@ void sig_handler(int signum) {}
 
 void *take_passenger()
 {
-    sem_p(SEM_FERRY_CAP);
-
     struct passenger passenger;
 
     int result = msgrcv(ipc_passenger_queue_id, &passenger, sizeof(struct passenger) - sizeof(long int), current_gender, IPC_NOWAIT);
@@ -196,6 +194,7 @@ int main()
             }
         }
 
+        sem_p(SEM_FERRY_CAP);
         pthread_t id;
         if (pthread_create(&id, NULL, *take_passenger, NULL))
         {

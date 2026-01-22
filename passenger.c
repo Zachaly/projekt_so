@@ -27,7 +27,7 @@ void readd_to_queue(int sig)
 
         log_info("PASSENGER", "Passenger adjusted the baggage");
     }
-    else if(sig == SIGPIPE)
+    else if (sig == SIGPIPE)
     {
         live = false;
     }
@@ -38,7 +38,6 @@ int main()
     load_sem_id();
     signal(SIGINT, readd_to_queue);
 
-    sem_p(SEM_IPC_PASSENGER_QUEUE);
     srand(time(NULL));
 
     data.baggage = random_number(MIN_PASSENGER_LUGGAGE, MAX_PASSENGER_LUGGAGE);
@@ -61,6 +60,7 @@ int main()
 
     ipc_id = atoi(idStr);
 
+    sem_p(SEM_IPC_PASSENGER_QUEUE);
     if (msgsnd(ipc_id, (struct passenger *)&data, sizeof(struct passenger) - sizeof(long int), 0) < 0)
     {
         perror("PASSENGER");
@@ -73,7 +73,13 @@ int main()
 
     signal(SIGTERM, readd_to_queue);
 
-    while (live);
+    sigset_t mask;
+    sigemptyset(&mask);
+
+    while (live)
+    {
+        sigsuspend(&mask);
+    }
 
     shmdt(&shm_max_luggage);
 

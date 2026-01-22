@@ -21,7 +21,6 @@ int shm_passengers_id;
 int shm_last_gender_id;
 int shm_gender_id;
 pthread_t passenger_thread;
-Queue *passengers;
 
 void cleanup()
 {
@@ -30,7 +29,7 @@ void cleanup()
     int s;
     // in case that gate is blocked due to one of these semaphores
     if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, GATE_NUM * 3) < 0 ||
-        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, GATE_NUM * 2) < 0)
+        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, (GATE_NUM + FERRY_CAPACITY) * 2) < 0)
     {
         perror("Semaphore error");
         exit(-1);
@@ -39,11 +38,6 @@ void cleanup()
     for (int i = 0; i < GATE_NUM; i++)
     {
         waitpid(gates[i], &s, 0);
-    }
-
-    for (int i = 0; i < PASSENGERS_NUMBER; i++)
-    {
-        kill(passenger_ids[i], SIGPIPE);
     }
 
     if (pthread_join(passenger_thread, NULL) < 0)
@@ -56,6 +50,12 @@ void cleanup()
     {
         perror("ORCHESTRATOR");
         exit(-1);
+    }
+
+    for (int i = 0; i < PASSENGERS_NUMBER; i++)
+    {
+        kill(passenger_ids[i], SIGPIPE);
+        waitpid(passenger_ids[i], &s, 0);
     }
 
     for (int i = 0; i < FERRY_NUM; i++)
@@ -136,16 +136,12 @@ void *wait_passengers()
 {
     int s;
 
-    while (queue_size(passengers) > 0)
-    {
-        pid_t pid = dequeue(passengers);
-        if (pid != waitpid(pid, &s, WNOHANG))
-        {
-            enqueue(passengers, pid);
-        }
-    }
+    int start = 0;
 
-    free_queue(passengers);
+    for (int i = 0; i < PASSENGERS_NUMBER; i++)
+    {
+        waitpid(-1, &s, 0);
+    }
 
     pthread_exit(0);
 }
@@ -344,8 +340,6 @@ int main()
         custom_sleep(1);
     }
 
-    passengers = init_queue();
-
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         int id = fork();
@@ -363,7 +357,6 @@ int main()
             break;
         }
         passenger_ids[i] = id;
-        enqueue(passengers, id);
 
         custom_sleep(1);
     }
