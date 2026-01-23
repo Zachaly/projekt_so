@@ -13,7 +13,7 @@ int max_baggage;
 bool leave = false;
 int *max_baggage_shm;
 int *passenger_left_shm;
-int ferry_passengers;
+int ferry_passengers = 0;
 int last_passengers = 0;
 int course_time;
 pthread_mutex_t mutex;
@@ -28,6 +28,7 @@ void *gangway()
     sem_p(SEM_IPC_WAITING_ROOM);
     int res = msgrcv(ipc_waiting_room_id, &passenger, sizeof(struct passenger) - sizeof(long int), 0, IPC_NOWAIT);
     sem_v(SEM_IPC_WAITING_ROOM);
+
     if (res < 0 && errno == ENOMSG)
     {
         pthread_exit(0);
@@ -40,18 +41,18 @@ void *gangway()
     }
 
     sprintf(buff, "Passenger %d arrived at gangway", passenger.pid);
-    sem_v(SEM_PEOPLE_AT_GANGWAY);
-
     log_info("FERRY", buff);
+    sem_v(SEM_PEOPLE_AT_GANGWAY);
 
     custom_sleep(5);
     sprintf(buff, "Passenger %d arrived at ferry", passenger.pid);
     log_info("FERRY", buff);
-    kill(passenger.pid, SIGPIPE);
 
     sem_p(SEM_SHM_PASSENGERS);
     *passenger_left_shm -= 1;
     sem_v(SEM_SHM_PASSENGERS);
+
+    kill(passenger.pid, SIGPIPE);
 
     pthread_mutex_lock(&mutex);
     ferry_passengers++;
@@ -68,8 +69,8 @@ void go_to_port()
 void leave_port()
 {
     semctl(sem_id, SEM_FERRY_CAP, SETVAL, 0);
-    log_info("FERRY", "Ferry will leave the port");
 
+    log_info("FERRY", "Ferry will leave the port");
     leave = true;
 
     sem_v(SEM_FERRY_START);
@@ -112,6 +113,8 @@ int main()
 
     max_baggage_shm = (int *)shmat(shm_max_baggage_id, NULL, SHM_RND);
     passenger_left_shm = (int *)shmat(shm_passengers_id, NULL, SHM_RND);
+
+    pthread_mutex_init(&mutex, NULL);
 
     sprintf(buff, "Ferry created with %d cap, %d max baggage and %d course time", FERRY_CAPACITY, max_baggage, course_time);
 
@@ -189,7 +192,6 @@ int main()
         sem_p(SEM_MAX_LUGGAGE_SHM);
         *max_baggage_shm = max_baggage;
         sem_v(SEM_MAX_LUGGAGE_SHM);
-
         if (cap > 0)
         {
             if (semctl(sem_id, SEM_GATE_START, SETVAL, GATE_NUM) < 0)
@@ -278,15 +280,19 @@ int main()
                 }
             }
 
-            kill(getppid(), SIGTERM);
-            sem_v(SEM_FERRY_LEFT);
+            // sem_v(SEM_FERRY_LEFT);
             sem_p(SEM_FERRY_START);
+
+            kill(getppid(), SIGTERM);
+
             sem_p(SEM_SHM_PASSENGERS);
             continue;
         }
 
         sem_p(SEM_FERRY_START);
+
         log_info("FERRY", "Ferry started course");
+
         sem_v(SEM_FERRY_LEFT);
 
         custom_sleep(course_time);

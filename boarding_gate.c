@@ -13,6 +13,7 @@ int ipc_waiting_room;
 int *shm_max_luggage;
 int *shm_gender_swap;
 int *shm_last_gender;
+int *passengers;
 Queue *gate_passengers;
 
 pthread_t id_1;
@@ -22,6 +23,7 @@ void sig_handler(int signum) {}
 
 void *take_passenger()
 {
+    sem_p(SEM_FERRY_CAP);
     struct passenger passenger;
 
     int result = msgrcv(ipc_passenger_queue_id, &passenger, sizeof(struct passenger) - sizeof(long int), current_gender, IPC_NOWAIT);
@@ -96,8 +98,8 @@ void *take_passenger()
     {
         sprintf(log_buff, "Passenger %d exceeded max baggage %d/%d", passenger.pid, passenger.baggage, *shm_max_luggage);
         log_info("GATE", log_buff);
-        kill(passenger.pid, SIGTERM);
         sem_v(SEM_FERRY_CAP);
+        kill(passenger.pid, SIGTERM);
     }
     else
     {
@@ -194,7 +196,6 @@ int main()
             }
         }
 
-        sem_p(SEM_FERRY_CAP);
         pthread_t id;
         if (pthread_create(&id, NULL, *take_passenger, NULL))
         {

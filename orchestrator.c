@@ -8,6 +8,7 @@
 Queue *available_ferries;
 bool custom_sleep_break = false;
 bool forced_ferry_leave = false;
+bool wait_for_passengers = true;
 int current_ferry;
 int *passengers_left;
 char strBuff[100];
@@ -117,6 +118,10 @@ void signal_handler(int signum, siginfo_t *info, void *context)
         custom_sleep_break = true;
         forced_ferry_leave = true;
     }
+    else if(signum == SIGPIPE)
+    {
+        wait_for_passengers = false;
+    }
 }
 
 void custom_sleep_interruptable(int seconds)
@@ -191,7 +196,7 @@ int main()
         semctl(sem_id, SEM_FERRY_START, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_SHM_GENDER, SETVAL, 1) < 0 ||
-        semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 1) < 0 ||
+        semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0)
@@ -393,24 +398,23 @@ int main()
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGPIPE, &sa, NULL);
 
-    bool last_passengers = false;
 
     while (*passengers_left > 0)
     {
-        sem_p(SEM_FERRY_LEFT);
         sprintf(strBuff, "%d passengers left", *passengers_left);
         log_info("ORCHESTRATOR", strBuff);
-
         sem_v(SEM_SHM_PASSENGERS);
 
-        while (queue_size(available_ferries) < 1)
+        if (queue_size(available_ferries) < 1)
         {
+            sem_p(SEM_SHM_PASSENGERS);
             continue;
         }
         sem_p(SEM_QUEUE_FERRIES);
         current_ferry = dequeue(available_ferries);
         sem_v(SEM_QUEUE_FERRIES);
         forced_ferry_leave = false;
+        wait_for_passengers = true;
 
         kill(current_ferry, SIGSYS);
 
@@ -428,6 +432,7 @@ int main()
 
         kill(current_ferry, SIGPIPE);
 
+        sem_p(SEM_FERRY_LEFT);
         sem_p(SEM_SHM_PASSENGERS);
     }
 
