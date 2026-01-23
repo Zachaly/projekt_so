@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <sys/shm.h>
 #include "config.h"
+#include "errno.h"
 
 int sem_id;
 char *file_name;
@@ -30,17 +31,17 @@ void sem_p(int sem_num)
     struct sembuf buf;
     buf.sem_num = sem_num;
     buf.sem_op = -1;
-    buf.sem_flg = 0;
+    buf.sem_flg = SEM_UNDO;
 
-    if (semop(sem_id, &buf, 1) == -1)
+    while (semop(sem_id, &buf, 1) == -1)
     {
         if (errno == EINTR)
         {
-            sem_p(sem_num);
+            continue;
         }
         else
         {
-            perror("Semaphore error!");
+            perror("Semaphore error!(p)");
             exit(-1);
         }
     }
@@ -51,11 +52,11 @@ void sem_v(int sem_num)
     struct sembuf buf;
     buf.sem_num = sem_num;
     buf.sem_op = 1;
-    buf.sem_flg = 0;
+    buf.sem_flg = SEM_UNDO;
 
     if (semop(sem_id, &buf, 1) == -1)
     {
-        perror("Semaphore error!");
+        perror("Semaphore error!(v)");
         exit(-1);
     }
 }
@@ -82,7 +83,12 @@ void log_info(char *source, char *text)
 
     fprintf(file, "[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
 
-    fclose(file);
+    if (fclose(file) != 0)
+    {
+        perror("Failed to close log file");
+        exit(-1);
+    }
+
     printf("[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
 
     sem_v(SEM_LOG);
@@ -95,7 +101,7 @@ int random_number(int min, int max)
 
 void custom_sleep(int t)
 {
-     return;
+    return;
     time_t start;
     time(&start);
 

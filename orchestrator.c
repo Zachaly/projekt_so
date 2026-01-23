@@ -189,9 +189,9 @@ int main()
         semctl(sem_id, SEM_IPC_WAITING_ROOM, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_MAX_LUGGAGE_SHM, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_FERRY_START, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 1) < 0 ||
+        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_SHM_GENDER, SETVAL, 1) < 0 ||
-        semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
+        semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0)
@@ -397,21 +397,10 @@ int main()
 
     while (*passengers_left > 0)
     {
-        if (!last_passengers && *passengers_left < PASSENGERS_QUEUE_SIZE)
-        {
-            if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, PASSENGERS_QUEUE_SIZE) < 0)
-            {
-                *passengers_left = 0;
-                sem_v(SEM_SHM_PASSENGERS);
-                cleanup();
-                exit(-1);
-            }
-
-            last_passengers = true;
-        }
-
+        sem_p(SEM_FERRY_LEFT);
         sprintf(strBuff, "%d passengers left", *passengers_left);
         log_info("ORCHESTRATOR", strBuff);
+
         sem_v(SEM_SHM_PASSENGERS);
 
         while (queue_size(available_ferries) < 1)
@@ -439,12 +428,18 @@ int main()
 
         kill(current_ferry, SIGPIPE);
 
-        sem_p(SEM_FERRY_LEFT);
-
         sem_p(SEM_SHM_PASSENGERS);
     }
 
     sem_v(SEM_SHM_PASSENGERS);
+
+    sigset_t mask;
+    sigemptyset(&mask);
+
+    while (queue_size(available_ferries) < FERRY_NUM)
+    {
+        sigsuspend(&mask);
+    }
 
     shmdt(&passengers_left);
 

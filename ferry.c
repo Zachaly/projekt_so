@@ -67,6 +67,7 @@ void go_to_port()
 
 void leave_port()
 {
+    semctl(sem_id, SEM_FERRY_CAP, SETVAL, 0);
     log_info("FERRY", "Ferry will leave the port");
 
     leave = true;
@@ -123,13 +124,18 @@ int main()
 
     Queue *thread_ids = init_queue();
 
-    //sem_p(SEM_SHM_PASSENGERS);
+    sem_p(SEM_SHM_PASSENGERS);
     while (*passenger_left_shm > 0)
     {
         sem_v(SEM_SHM_PASSENGERS);
 
+        sigset_t mask;
+        sigemptyset(&mask);
+
         while (not_in_port)
-            ;
+        {
+            sigsuspend(&mask);
+        }
 
         if (stop)
         {
@@ -233,8 +239,6 @@ int main()
 
             custom_sleep(2);
         }
-
-        semctl(sem_id, SEM_FERRY_CAP, SETVAL, 0);
 
         while (queue_size(thread_ids) > 0)
         {
