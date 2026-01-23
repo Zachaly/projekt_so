@@ -127,11 +127,8 @@ int main()
 
     Queue *thread_ids = init_queue();
 
-    sem_p(SEM_SHM_PASSENGERS);
-    while (*passenger_left_shm > 0)
+    while (!stop)
     {
-        sem_v(SEM_SHM_PASSENGERS);
-
         sigset_t mask;
         sigemptyset(&mask);
 
@@ -280,12 +277,10 @@ int main()
                 }
             }
 
-            // sem_v(SEM_FERRY_LEFT);
             sem_p(SEM_FERRY_START);
 
             kill(getppid(), SIGTERM);
 
-            sem_p(SEM_SHM_PASSENGERS);
             continue;
         }
 
@@ -299,9 +294,7 @@ int main()
 
         kill(getppid(), SIGTERM);
 
-        sem_p(SEM_SHM_PASSENGERS);
     }
-    sem_v(SEM_SHM_PASSENGERS);
 
     free_queue(thread_ids);
 

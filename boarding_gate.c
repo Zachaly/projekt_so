@@ -19,11 +19,16 @@ Queue *gate_passengers;
 pthread_t id_1;
 pthread_t id_2;
 
-void sig_handler(int signum) {}
+void sig_handler(int signum)
+{
+    if (signum == SIGTERM)
+    {
+        stop = true;
+    }
+}
 
 void *take_passenger()
 {
-    sem_p(SEM_FERRY_CAP);
     struct passenger passenger;
 
     int result = msgrcv(ipc_passenger_queue_id, &passenger, sizeof(struct passenger) - sizeof(long int), current_gender, IPC_NOWAIT);
@@ -124,14 +129,13 @@ int main()
     load_sem_id();
 
     signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
 
     int shm_id = atoi(getenv(SHM_LUGGAGE_ENV));
-    int shm_passengers_id = atoi(getenv(SHM_PASSENGERS_ENV));
     int shm_gender_swap_id = atoi(getenv(SHM_GENDER_SWAP_ENV));
     int shm_last_gender_id = atoi(getenv(SHM_LAST_GENDER_ENV));
 
     shm_max_luggage = (int *)shmat(shm_id, NULL, SHM_RDONLY);
-    int *passengers = (int *)shmat(shm_passengers_id, NULL, SHM_RDONLY);
     shm_gender_swap = (int *)shmat(shm_gender_swap_id, NULL, SHM_RND);
     shm_last_gender = (int *)shmat(shm_last_gender_id, NULL, SHM_RND);
 
@@ -144,11 +148,8 @@ int main()
     sem_p(SEM_GATE_START);
     log_info("GATE", "Gate opened");
 
-    sem_p(SEM_SHM_PASSENGERS);
-    while (*passengers > 0)
+    while (!stop)
     {
-        sem_v(SEM_SHM_PASSENGERS);
-
         sem_p(SEM_SHM_GENDER);
         if (*shm_gender_swap < 0)
         {
@@ -172,7 +173,6 @@ int main()
                     exit(-1);
                 }
             }
-            sem_p(SEM_SHM_PASSENGERS);
             continue;
         }
         sem_v(SEM_SHM_GENDER);
@@ -196,6 +196,8 @@ int main()
             }
         }
 
+        sem_p(SEM_FERRY_CAP);
+
         pthread_t id;
         if (pthread_create(&id, NULL, *take_passenger, NULL))
         {
@@ -205,9 +207,21 @@ int main()
         enqueue(gate_passengers, id);
 
         custom_sleep(1);
-        sem_p(SEM_SHM_PASSENGERS);
     }
-    sem_v(SEM_SHM_PASSENGERS);
+
+    while (queue_size(gate_passengers) > 1)
+    {
+        pthread_t id = dequeue(gate_passengers);
+        if (pthread_join(id, NULL) < 0)
+        {
+            continue;
+        }
+        if (pthread_detach(id) < 0)
+        {
+            perror("GATE");
+            exit(-1);
+        }
+    }
 
     free_queue(gate_passengers);
     log_info("GATE", "Gate closed");

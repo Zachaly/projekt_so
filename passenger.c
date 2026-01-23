@@ -38,6 +38,7 @@ int main()
 {
     load_sem_id();
     signal(SIGINT, readd_to_queue);
+    signal(SIGTERM, readd_to_queue);
 
     srand(time(NULL));
 
@@ -74,8 +75,6 @@ int main()
     sprintf(buff, "%ld passenger created with %d baggage(is VIP? %d)", data.mtype, data.baggage, is_vip);
 
     log_info("PASSENGER", buff);
-
-    signal(SIGTERM, readd_to_queue);
 
     sigset_t mask;
     sigemptyset(&mask);

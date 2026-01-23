@@ -38,6 +38,7 @@ void cleanup()
 
     for (int i = 0; i < GATE_NUM; i++)
     {
+        kill(gates[i], SIGTERM);
         waitpid(gates[i], &s, 0);
     }
 
@@ -118,7 +119,7 @@ void signal_handler(int signum, siginfo_t *info, void *context)
         custom_sleep_break = true;
         forced_ferry_leave = true;
     }
-    else if(signum == SIGPIPE)
+    else if (signum == SIGPIPE)
     {
         wait_for_passengers = false;
     }
@@ -398,9 +399,20 @@ int main()
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGPIPE, &sa, NULL);
 
-
     while (*passengers_left > 0)
     {
+        struct msqid_ds queue_data;
+        msgctl(ipc_passengers_id, IPC_STAT, &queue_data);
+
+        if (queue_data.msg_qnum < PASSENGERS_NUMBER / 5)
+        {
+            if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, PASSENGERS_QUEUE_SIZE) < 0)
+            {
+                cleanup();
+                exit(-1);
+            }
+        }
+
         sprintf(strBuff, "%d passengers left", *passengers_left);
         log_info("ORCHESTRATOR", strBuff);
         sem_v(SEM_SHM_PASSENGERS);
