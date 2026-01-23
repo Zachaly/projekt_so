@@ -9,7 +9,6 @@ int random_number(int min, int max);
 struct passenger data;
 int ipc_id;
 int *shm_max_luggage;
-int *passengers;
 bool live = true;
 
 void readd_to_queue(int sig)
@@ -58,9 +57,6 @@ int main()
     int shm_luggage_id = atoi(getenv(SHM_LUGGAGE_ENV));
     shm_max_luggage = shmat(shm_luggage_id, NULL, SHM_RDONLY);
 
-    int shm_passengers_id = atoi(getenv(SHM_PASSENGERS_ENV));
-    passengers = (int *)shmat(shm_passengers_id, NULL, SHM_RND);
-
     char *idStr = getenv(IPC_PASSENGER_QUEUE_ENV);
 
     ipc_id = atoi(idStr);
@@ -84,7 +80,6 @@ int main()
         sigsuspend(&mask);
     }
 
-    shmdt(&passengers);
     shmdt(&shm_max_luggage);
 
     return 0;

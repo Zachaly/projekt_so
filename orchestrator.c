@@ -11,7 +11,7 @@ bool forced_ferry_leave = false;
 bool wait_for_passengers = true;
 int current_ferry;
 int *passengers_left;
-char strBuff[100];
+char strBuff[200];
 pid_t passenger_ids[PASSENGERS_NUMBER];
 pid_t gates[GATE_NUM];
 pid_t ferry_ids[FERRY_NUM];
@@ -30,7 +30,8 @@ void cleanup()
     int s;
     // in case that gate is blocked due to one of these semaphores
     if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, GATE_NUM * 3) < 0 ||
-        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, (GATE_NUM + FERRY_CAPACITY) * 2) < 0)
+        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, (GATE_NUM + FERRY_CAPACITY) * 2) < 0 ||
+        semctl(sem_id, SEM_GATE_START, SETVAL, GATE_NUM) < 0)
     {
         perror("Semaphore error");
         exit(-1);
@@ -195,7 +196,7 @@ int main()
         semctl(sem_id, SEM_IPC_WAITING_ROOM, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_MAX_LUGGAGE_SHM, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_FERRY_START, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 0) < 0 ||
+        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_SHM_GENDER, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0 ||
@@ -342,7 +343,9 @@ int main()
             break;
         }
         ferry_ids[i] = id;
+        sem_p(SEM_QUEUE_FERRIES);
         enqueue(available_ferries, id);
+        sem_v(SEM_QUEUE_FERRIES);
         custom_sleep(1);
     }
 
@@ -399,12 +402,21 @@ int main()
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGPIPE, &sa, NULL);
 
-    while (*passengers_left > 0)
+    while (1)
     {
+        sem_p(SEM_SHM_PASSENGERS);
+        int pass = *passengers_left;
+        sem_v(SEM_SHM_PASSENGERS);
+
+        if (pass < 1)
+        {
+            break;
+        }
+
         struct msqid_ds queue_data;
         msgctl(ipc_passengers_id, IPC_STAT, &queue_data);
 
-        if (queue_data.msg_qnum < PASSENGERS_NUMBER / 5)
+        if (queue_data.msg_qnum < PASSENGERS_QUEUE_SIZE / 5)
         {
             if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, PASSENGERS_QUEUE_SIZE) < 0)
             {
@@ -413,15 +425,14 @@ int main()
             }
         }
 
-        sprintf(strBuff, "%d passengers left", *passengers_left);
+        sprintf(strBuff, "%d passengers left", pass);
         log_info("ORCHESTRATOR", strBuff);
-        sem_v(SEM_SHM_PASSENGERS);
 
         if (queue_size(available_ferries) < 1)
         {
-            sem_p(SEM_SHM_PASSENGERS);
             continue;
         }
+
         sem_p(SEM_QUEUE_FERRIES);
         current_ferry = dequeue(available_ferries);
         sem_v(SEM_QUEUE_FERRIES);
@@ -435,20 +446,20 @@ int main()
         custom_sleep_interruptable(FERRY_START_TAKING_PASSENGERS_TIME);
 
         sem_v(SEM_TAKE_PASSENGERS);
-
         custom_sleep_interruptable(FERRY_WAIT_FOR_PASSENGERS_TIME);
 
         sem_p(SEM_PEOPLE_AT_GANGWAY);
+        for (int i = 0; i < GATE_NUM; i++)
+        {
+            kill(gates[i], SIGSYS);
+        }
 
         sem_v(SEM_LEAVE_PORT);
 
         kill(current_ferry, SIGPIPE);
 
         sem_p(SEM_FERRY_LEFT);
-        sem_p(SEM_SHM_PASSENGERS);
     }
-
-    sem_v(SEM_SHM_PASSENGERS);
 
     sigset_t mask;
     sigemptyset(&mask);

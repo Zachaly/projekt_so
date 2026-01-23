@@ -22,12 +22,11 @@ bool stop = false;
 
 void *gangway()
 {
-    char buff[100];
+    char buff[200];
 
     struct passenger passenger;
-    sem_p(SEM_IPC_WAITING_ROOM);
+
     int res = msgrcv(ipc_waiting_room_id, &passenger, sizeof(struct passenger) - sizeof(long int), 0, IPC_NOWAIT);
-    sem_v(SEM_IPC_WAITING_ROOM);
 
     if (res < 0 && errno == ENOMSG)
     {
@@ -68,7 +67,11 @@ void go_to_port()
 
 void leave_port()
 {
-    semctl(sem_id, SEM_FERRY_CAP, SETVAL, 0);
+    if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, 0) < 0)
+    {
+        perror("FERRY");
+        exit(-1);
+    }
 
     log_info("FERRY", "Ferry will leave the port");
     leave = true;
@@ -137,6 +140,7 @@ int main()
             sigsuspend(&mask);
         }
 
+        not_in_port = true;
         if (stop)
         {
             break;
@@ -257,7 +261,6 @@ int main()
         }
 
         sem_p(SEM_LEAVE_PORT);
-        not_in_port = true;
 
         if (ferry_passengers == 0)
         {
@@ -293,7 +296,6 @@ int main()
         custom_sleep(course_time);
 
         kill(getppid(), SIGTERM);
-
     }
 
     free_queue(thread_ids);
