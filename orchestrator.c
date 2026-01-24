@@ -205,7 +205,9 @@ int main()
         semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_GATE_CLOSED, SETVAL, 1) < 0 ||
-        semctl(sem_id, SEM_PASSENGER_CREATED, SETVAL, 0))
+        semctl(sem_id, SEM_PASSENGER_CREATED, SETVAL, 0) < 0 ||
+        semctl(sem_id, SEM_FERRY_MOVE_NEXT, SETVAL, 0) < 0 ||
+        semctl(sem_id, SEM_ORCHESTRATOR_MOVE_NEXT, SETVAL, 0) < 0)
     {
         perror("Semaphore error");
         exit(-1);
@@ -458,14 +460,13 @@ int main()
         custom_sleep_interruptable(FERRY_WAIT_FOR_PASSENGERS_TIME);
 
         sem_p(SEM_PEOPLE_AT_GANGWAY);
+        printf("a\n");
 
         sem_v(SEM_LEAVE_PORT);
 
         for (int i = 0; i < GATE_NUM; i++)
         {
             kill(gates[i], SIGSYS);
-            sem_v(SEM_GATE_START);
-            sem_v(SEM_FERRY_CAP);
         }
 
         for (int i = 0; i < GATE_NUM; i++)
@@ -476,7 +477,7 @@ int main()
         kill(current_ferry, SIGPIPE);
 
         sem_v(SEM_FERRY_START);
-
+        
         sem_p(SEM_FERRY_LEFT);
     }
 

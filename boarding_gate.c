@@ -29,6 +29,8 @@ void sig_handler(int signum)
     if (signum == SIGSYS)
     {
         take_passengers = false;
+        sem_v(SEM_GATE_START);
+        sem_v(SEM_FERRY_CAP);
     }
 }
 
@@ -110,11 +112,11 @@ void *take_passenger()
 
     custom_sleep(5);
 
-    // sem_p(SEM_IPC_WAITING_ROOM);
     sem_p(SEM_MAX_LUGGAGE_SHM);
-
     if (passenger.baggage > *shm_max_luggage)
     {
+        sem_v(SEM_MAX_LUGGAGE_SHM);
+
         sprintf(log_buff, "Passenger %d exceeded max baggage %d/%d", passenger.pid, passenger.baggage, *shm_max_luggage);
         log_info("GATE", log_buff);
         sem_v(SEM_FERRY_CAP);
@@ -122,8 +124,9 @@ void *take_passenger()
     }
     else
     {
-        sprintf(log_buff, "Passenger %d left the gate", passenger.pid);
+        sem_v(SEM_MAX_LUGGAGE_SHM);
 
+        sprintf(log_buff, "Passenger %d left the gate", passenger.pid);\
         log_info("GATE", log_buff);
         if (msgsnd(ipc_waiting_room, &passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
         {
@@ -132,8 +135,6 @@ void *take_passenger()
         }
         sem_v(SEM_IPC_PASSENGER_QUEUE);
     }
-    // sem_v(SEM_IPC_WAITING_ROOM);
-    sem_v(SEM_MAX_LUGGAGE_SHM);
 
     pthread_exit(0);
 }
@@ -174,6 +175,7 @@ int main()
                 break;
             }
             sem_v(SEM_GATE_CLOSED);
+            take_passengers = true;
             continue;
         }
 
@@ -243,6 +245,11 @@ int main()
 
             custom_sleep(1);
         }
+
+        sem_p(SEM_SHM_GENDER);
+        *shm_last_gender = 0;
+        *shm_gender_swap = 3;
+        sem_v(SEM_SHM_GENDER);
 
         take_passengers = true;
 

@@ -73,7 +73,6 @@ void leave_port()
         exit(-1);
     }
 
-    log_info("FERRY", "Ferry will leave the port");
     leave = true;
 }
 
@@ -208,7 +207,7 @@ int main()
             }
         }
         sem_v(SEM_FERRY_CAN_LEAVE);
-        
+
         sem_p(SEM_TAKE_PASSENGERS);
         log_info("FERRY", "Ferry started taking passengers");
 
@@ -238,6 +237,8 @@ int main()
 
             custom_sleep(2);
         }
+
+        log_info("FERRY", "Ferry will leave the port");
 
         while (queue_size(thread_ids) > 0)
         {
