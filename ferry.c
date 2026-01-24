@@ -75,8 +75,6 @@ void leave_port()
 
     log_info("FERRY", "Ferry will leave the port");
     leave = true;
-
-    sem_v(SEM_FERRY_START);
 }
 
 void sig_handler(int signum)
@@ -189,10 +187,18 @@ int main()
             perror("FERRY");
             exit(-1);
         }
+        sem_v(SEM_IPC_WAITING_ROOM);
 
         sem_p(SEM_MAX_LUGGAGE_SHM);
         *max_baggage_shm = max_baggage;
         sem_v(SEM_MAX_LUGGAGE_SHM);
+
+        if (semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0)
+        {
+            perror("FERRY");
+            exit(-1);
+        }
+
         if (cap > 0)
         {
             if (semctl(sem_id, SEM_GATE_START, SETVAL, GATE_NUM) < 0)
@@ -201,18 +207,8 @@ int main()
                 exit(-1);
             }
         }
-        sem_v(SEM_IPC_WAITING_ROOM);
-
-        custom_sleep(FERRY_START_TAKING_PASSENGERS_TIME);
-
-        if (semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0)
-        {
-            perror("FERRY");
-            exit(-1);
-        }
-
         sem_v(SEM_FERRY_CAN_LEAVE);
-
+        
         sem_p(SEM_TAKE_PASSENGERS);
         log_info("FERRY", "Ferry started taking passengers");
 
@@ -236,7 +232,7 @@ int main()
 
             pthread_t thread_id;
 
-            pthread_create(&thread_id, NULL, *gangway, NULL);
+            pthread_create(&thread_id, NULL, gangway, NULL);
 
             enqueue(thread_ids, thread_id);
 

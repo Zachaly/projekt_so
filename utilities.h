@@ -31,7 +31,7 @@ void sem_p(int sem_num)
     struct sembuf buf;
     buf.sem_num = sem_num;
     buf.sem_op = -1;
-    buf.sem_flg = SEM_UNDO;
+    buf.sem_flg = 0;
 
     while (semop(sem_id, &buf, 1) == -1)
     {
@@ -52,7 +52,7 @@ void sem_v(int sem_num)
     struct sembuf buf;
     buf.sem_num = sem_num;
     buf.sem_op = 1;
-    buf.sem_flg = SEM_UNDO;
+    buf.sem_flg = 0;
 
     if (semop(sem_id, &buf, 1) == -1)
     {
@@ -68,30 +68,34 @@ void log_info(char *source, char *text)
     localtime_r(&now, &local_time);
 
     sem_p(SEM_LOG);
-
-    FILE *file = fopen(file_name, "a");
+    int file = open(file_name, O_WRONLY | O_CREAT | O_APPEND, 0644);
 
     if (!file)
     {
         perror("Cannot open log file");
-        exit(-1);
     }
 
     char time_buffer[50];
 
+    char buff[300];
     strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", &local_time);
 
-    fprintf(file, "[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
+    int len = snprintf(buff, sizeof(buff), "[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
 
-    if (fclose(file) != 0)
+    if (write(file, buff, len) < 0)
+    {
+        perror("Error while writing to file");
+    }
+    sem_v(SEM_LOG);
+
+    
+    if (close(file) != 0)
     {
         perror("Failed to close log file");
-        exit(-1);
     }
 
     printf("[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
 
-    sem_v(SEM_LOG);
 }
 
 int random_number(int min, int max)

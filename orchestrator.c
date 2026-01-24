@@ -28,18 +28,20 @@ void cleanup()
     free_queue(available_ferries);
 
     int s;
-    // in case that gate is blocked due to one of these semaphores
-    if (semctl(sem_id, SEM_FERRY_CAP, SETVAL, GATE_NUM * 3) < 0 ||
-        semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, (GATE_NUM + FERRY_CAPACITY) * 2) < 0 ||
-        semctl(sem_id, SEM_GATE_START, SETVAL, GATE_NUM) < 0)
-    {
-        perror("Semaphore error");
-        exit(-1);
-    }
 
     for (int i = 0; i < GATE_NUM; i++)
     {
         kill(gates[i], SIGTERM);
+    }
+
+    if (semctl(sem_id, SEM_GATE_START, SETVAL, GATE_NUM) < 0 ||
+        semctl(sem_id, SEM_FERRY_CAP, SETVAL, GATE_NUM) < 0)
+    {
+        perror("Semaphore error");
+    }
+
+    for (int i = 0; i < GATE_NUM; i++)
+    {
         waitpid(gates[i], &s, 0);
     }
 
@@ -175,7 +177,7 @@ int main()
         exit(-1);
     }
 
-    sem_id = semget(semKey, 16, IPC_CREAT | 0600);
+    sem_id = semget(semKey, 18, IPC_CREAT | 0600);
     if (sem_id < 0)
     {
         perror("Error while creating semaphore");
@@ -201,7 +203,9 @@ int main()
         semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0)
+        semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0 ||
+        semctl(sem_id, SEM_GATE_CLOSED, SETVAL, 1) < 0 ||
+        semctl(sem_id, SEM_PASSENGER_CREATED, SETVAL, 0))
     {
         perror("Semaphore error");
         exit(-1);
@@ -377,6 +381,11 @@ int main()
         exit(-1);
     }
 
+    for (int i = 0; i < PASSENGERS_NUMBER; i++)
+    {
+        sem_p(SEM_PASSENGER_CREATED);
+    }
+
     for (int i = 0; i < GATE_NUM; i++)
     {
         int id = fork();
@@ -437,7 +446,6 @@ int main()
         current_ferry = dequeue(available_ferries);
         sem_v(SEM_QUEUE_FERRIES);
         forced_ferry_leave = false;
-        wait_for_passengers = true;
 
         kill(current_ferry, SIGSYS);
 
@@ -446,17 +454,28 @@ int main()
         custom_sleep_interruptable(FERRY_START_TAKING_PASSENGERS_TIME);
 
         sem_v(SEM_TAKE_PASSENGERS);
+
         custom_sleep_interruptable(FERRY_WAIT_FOR_PASSENGERS_TIME);
 
         sem_p(SEM_PEOPLE_AT_GANGWAY);
-        for (int i = 0; i < GATE_NUM; i++)
-        {
-            kill(gates[i], SIGSYS);
-        }
 
         sem_v(SEM_LEAVE_PORT);
 
+        for (int i = 0; i < GATE_NUM; i++)
+        {
+            kill(gates[i], SIGSYS);
+            sem_v(SEM_GATE_START);
+            sem_v(SEM_FERRY_CAP);
+        }
+
+        for (int i = 0; i < GATE_NUM; i++)
+        {
+            sem_p(SEM_GATE_CLOSED);
+        }
+
         kill(current_ferry, SIGPIPE);
+
+        sem_v(SEM_FERRY_START);
 
         sem_p(SEM_FERRY_LEFT);
     }

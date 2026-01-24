@@ -38,29 +38,31 @@ void *take_passenger()
 
     int result = msgrcv(ipc_passenger_queue_id, &passenger, sizeof(struct passenger) - sizeof(long int), current_gender, IPC_NOWAIT);
 
-    if (errno == ENOMSG && current_gender == 0)
+    if (result < 0)
     {
-        sem_v(SEM_FERRY_CAP);
-        pthread_mutex_unlock(&mutex);
-        pthread_exit(0);
-        return NULL;
-    }
-    else if (errno == ENOMSG)
-    {
-        sem_v(SEM_FERRY_CAP);
         pthread_mutex_lock(&mutex);
-        current_gender = 0;
-        pthread_mutex_unlock(&mutex);
-        pthread_exit(0);
-        return NULL;
-    }
-    else if (result < 0)
-    {
-        pthread_mutex_unlock(&mutex);
-        sem_v(SEM_FERRY_CAP);
-        perror("GATE");
-        pthread_exit(0);
-        return NULL;
+        if (errno == ENOMSG && current_gender == 0)
+        {
+            sem_v(SEM_FERRY_CAP);
+            pthread_mutex_unlock(&mutex);
+            pthread_exit(0);
+            return NULL;
+        }
+        else if (errno == ENOMSG)
+        {
+            sem_v(SEM_FERRY_CAP);
+            current_gender = 0;
+            pthread_mutex_unlock(&mutex);
+            pthread_exit(0);
+            return NULL;
+        }
+        else
+        {
+            sem_v(SEM_FERRY_CAP);
+            perror("GATE");
+            pthread_exit(0);
+            return NULL;
+        }
     }
 
     sem_p(SEM_SHM_GENDER);
@@ -72,10 +74,14 @@ void *take_passenger()
     {
         *shm_gender_swap = 3;
     }
+    sem_v(SEM_SHM_GENDER);
 
     pthread_mutex_lock(&mutex);
+
+    sem_p(SEM_SHM_GENDER);
     if (current_gender != 0 && current_gender != passenger.mtype && queue_size(gate_passengers) > 0)
     {
+        pthread_mutex_unlock(&mutex);
         pthread_t id = dequeue(gate_passengers);
         if (pthread_join(id, NULL) < 0)
         {
@@ -87,6 +93,7 @@ void *take_passenger()
             perror("GATE");
             exit(-1);
         }
+        pthread_mutex_lock(&mutex);
     }
 
     *shm_last_gender = passenger.mtype;
@@ -103,7 +110,7 @@ void *take_passenger()
 
     custom_sleep(5);
 
-    sem_p(SEM_IPC_WAITING_ROOM);
+    // sem_p(SEM_IPC_WAITING_ROOM);
     sem_p(SEM_MAX_LUGGAGE_SHM);
 
     if (passenger.baggage > *shm_max_luggage)
@@ -125,7 +132,7 @@ void *take_passenger()
         }
         sem_v(SEM_IPC_PASSENGER_QUEUE);
     }
-    sem_v(SEM_IPC_WAITING_ROOM);
+    // sem_v(SEM_IPC_WAITING_ROOM);
     sem_v(SEM_MAX_LUGGAGE_SHM);
 
     pthread_exit(0);
@@ -158,8 +165,17 @@ int main()
     while (!stop)
     {
         sem_p(SEM_GATE_START);
+
         current_gender = 0;
-        log_info("GATE", "Gate is taking new passengers");
+        if (!take_passengers)
+        {
+            if (stop)
+            {
+                break;
+            }
+            sem_v(SEM_GATE_CLOSED);
+            continue;
+        }
 
         while (take_passengers)
         {
@@ -186,9 +202,11 @@ int main()
                         exit(-1);
                     }
                 }
-                continue;
             }
-            sem_v(SEM_SHM_GENDER);
+            else
+            {
+                sem_v(SEM_SHM_GENDER);
+            }
 
             if (queue_size(gate_passengers) == 0)
             {
@@ -210,9 +228,13 @@ int main()
             }
 
             sem_p(SEM_FERRY_CAP);
+            if (!take_passengers)
+            {
+                continue;
+            }
 
             pthread_t id;
-            if (pthread_create(&id, NULL, *take_passenger, NULL))
+            if (pthread_create(&id, NULL, take_passenger, NULL))
             {
                 perror("GATE");
                 exit(-1);
@@ -224,7 +246,7 @@ int main()
 
         take_passengers = true;
 
-        log_info("GATE", "Gate stopped taking new passengers");
+        sem_v(SEM_GATE_CLOSED);
     }
 
     while (queue_size(gate_passengers) > 1)

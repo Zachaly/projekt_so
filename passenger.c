@@ -61,16 +61,18 @@ int main()
 
     ipc_id = atoi(idStr);
 
+    sprintf(buff, "%ld passenger created with %d baggage(is VIP? %d)", data.mtype, data.baggage, is_vip);
+
+    log_info("PASSENGER", buff);
+
+    sem_v(SEM_PASSENGER_CREATED);
+
     sem_p(SEM_IPC_PASSENGER_QUEUE);
     if (msgsnd(ipc_id, (struct passenger *)&data, sizeof(struct passenger) - sizeof(long int), 0) < 0)
     {
         perror("PASSENGER");
         exit(-1);
     }
-
-    sprintf(buff, "%ld passenger created with %d baggage(is VIP? %d)", data.mtype, data.baggage, is_vip);
-
-    log_info("PASSENGER", buff);
 
     sigset_t mask;
     sigemptyset(&mask);
