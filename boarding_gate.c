@@ -120,6 +120,7 @@ void *take_passenger()
 
         sprintf(log_buff, "Passenger %d left the gate", passenger.pid);
         log_info("GATE", log_buff);
+        sem_p(SEM_WAITING_ROOM_CAP);
         if (msgsnd(ipc_waiting_room, &passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
         {
             perror("GATE");

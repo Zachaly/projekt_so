@@ -127,10 +127,6 @@ void signal_handler(int signum, siginfo_t *info, void *context)
         custom_sleep_break = true;
         forced_ferry_leave = true;
     }
-    else if (signum == SIGPIPE)
-    {
-        wait_for_passengers = false;
-    }
 }
 
 void custom_sleep_interruptable(int seconds)
@@ -182,7 +178,7 @@ int main()
         exit(-1);
     }
 
-    sem_id = semget(semKey, 13, IPC_CREAT | 0600);
+    sem_id = semget(semKey, 14, IPC_CREAT | 0600);
     if (sem_id < 0)
     {
         perror("Error while creating semaphore");
@@ -206,7 +202,8 @@ int main()
         semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_PASSENGER_CREATED, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_FERRY_MOVE_NEXT, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_ORCHESTRATOR_MOVE_NEXT, SETVAL, 0) < 0)
+        semctl(sem_id, SEM_ORCHESTRATOR_MOVE_NEXT, SETVAL, 0) < 0 ||
+        semctl(sem_id, SEM_WAITING_ROOM_CAP, SETVAL, FERRY_CAPACITY) < 0)
     {
         perror("Semaphore error");
         exit(-1);
@@ -459,8 +456,6 @@ int main()
         custom_sleep_interruptable(FERRY_WAIT_FOR_PASSENGERS_TIME);
 
         sem_p(SEM_PEOPLE_AT_GANGWAY);
-
-        sem_v(SEM_FERRY_MOVE_NEXT);
 
         kill(current_ferry, SIGPIPE);
 

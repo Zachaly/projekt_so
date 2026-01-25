@@ -38,6 +38,7 @@ void *gangway()
         pthread_exit(0);
         return NULL;
     }
+    sem_v(SEM_WAITING_ROOM_CAP);
 
     sprintf(buff, "Passenger %d arrived at gangway", passenger.pid);
     log_info("FERRY", buff);
@@ -171,6 +172,7 @@ int main()
 
             sprintf(buff, "Passenger %d skipped queue and added to waiting room as VIP", passenger.pid);
             log_info("FERRY", buff);
+            sem_p(SEM_WAITING_ROOM_CAP);
 
             if (msgsnd(ipc_waiting_room_id, (struct passenger *)&passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
             {
@@ -263,14 +265,16 @@ int main()
         {
             log_info("FERRY", "Ferry didn't take off due to no passengers");
 
-            sem_p(SEM_FERRY_MOVE_NEXT);
+            //sem_p(SEM_FERRY_MOVE_NEXT);
 
             kill(getppid(), SIGTERM);
+
+            sem_v(SEM_ORCHESTRATOR_MOVE_NEXT);
 
             continue;
         }
 
-        sem_p(SEM_FERRY_MOVE_NEXT);
+        //sem_p(SEM_FERRY_MOVE_NEXT);
 
         log_info("FERRY", "Ferry started course");
 

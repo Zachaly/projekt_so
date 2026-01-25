@@ -33,7 +33,7 @@ void sem_p(int sem_num)
     buf.sem_op = -1;
     buf.sem_flg = 0;
 
-    if(semop(sem_id, &buf, 1) == -1)
+    if (semop(sem_id, &buf, 1) == -1)
     {
         if (errno == EINTR)
         {
@@ -56,6 +56,11 @@ void sem_v(int sem_num)
 
     if (semop(sem_id, &buf, 1) == -1)
     {
+        if (errno == EINTR)
+        {
+            sem_v(sem_num);
+            return;
+        }
         perror("Semaphore error!(v)");
         exit(-1);
     }
@@ -94,7 +99,6 @@ void log_info(char *source, char *text)
     }
 
     printf("[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
-
 }
 
 int random_number(int min, int max)
