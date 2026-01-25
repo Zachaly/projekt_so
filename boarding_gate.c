@@ -8,7 +8,6 @@
 int current_gender = 0;
 int ipc_passenger_queue_id;
 bool stop = false;
-bool take_passengers = true;
 pthread_mutex_t mutex;
 int ipc_waiting_room;
 int *shm_max_luggage;
@@ -23,7 +22,6 @@ void sig_handler(int signum)
 {
     if (signum == SIGTERM)
     {
-        take_passengers = false;
         stop = true;
     }
 }
@@ -139,7 +137,6 @@ int main()
 
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
-    signal(SIGSYS, sig_handler);
 
     int shm_id = atoi(getenv(SHM_LUGGAGE_ENV));
     int shm_gender_swap_id = atoi(getenv(SHM_GENDER_SWAP_ENV));

@@ -8,7 +8,6 @@
 Queue *available_ferries;
 bool custom_sleep_break = false;
 bool forced_ferry_leave = false;
-bool wait_for_passengers = true;
 int current_ferry;
 int *passengers_left;
 char strBuff[200];
@@ -47,18 +46,6 @@ void cleanup()
 
     printf("Gates deleted \n");
 
-    if (pthread_join(passenger_thread, NULL) < 0)
-    {
-        perror("ORCHESTRATOR");
-        exit(-1);
-    }
-
-    if (pthread_detach(passenger_thread) < 0)
-    {
-        perror("ORCHESTRATOR");
-        exit(-1);
-    }
-
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         kill(passenger_ids[i], SIGPIPE);
@@ -74,6 +61,18 @@ void cleanup()
     }
 
     printf("Ferries deleted\n");
+
+    if (pthread_join(passenger_thread, NULL) < 0)
+    {
+        perror("ORCHESTRATOR");
+        exit(-1);
+    }
+
+    if (pthread_detach(passenger_thread) < 0)
+    {
+        perror("ORCHESTRATOR");
+        exit(-1);
+    }
 
     if (shmctl(shm_gender_swap_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0 || shmctl(shm_gender_id, IPC_RMID, NULL) < 0 || shmctl(shm_last_gender_id, IPC_RMID, NULL) < 0)
     {
