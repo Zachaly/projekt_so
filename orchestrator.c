@@ -192,7 +192,7 @@ int main()
     set_env_var(SEM_ENV, strBuff);
 
     if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, PASSENGERS_QUEUE_SIZE) < 0 ||
-        semctl(sem_id, SEM_LOG, SETVAL, 2) < 0 ||
+        semctl(sem_id, SEM_LOG, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_GATE_START, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_IPC_WAITING_ROOM, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_MAX_LUGGAGE_SHM, SETVAL, 1) < 0 ||
