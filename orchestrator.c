@@ -45,6 +45,8 @@ void cleanup()
         waitpid(gates[i], &s, 0);
     }
 
+    printf("Gates deleted \n");
+
     if (pthread_join(passenger_thread, NULL) < 0)
     {
         perror("ORCHESTRATOR");
@@ -63,11 +65,15 @@ void cleanup()
         waitpid(passenger_ids[i], &s, 0);
     }
 
+    printf("Passengers deleted \n");
+
     for (int i = 0; i < FERRY_NUM; i++)
     {
         kill(ferry_ids[i], SIGTERM);
         waitpid(ferry_ids[i], &s, 0);
     }
+
+    printf("Ferries deleted\n");
 
     if (shmctl(shm_gender_swap_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0 || shmctl(shm_gender_id, IPC_RMID, NULL) < 0 || shmctl(shm_last_gender_id, IPC_RMID, NULL) < 0)
     {
@@ -177,7 +183,7 @@ int main()
         exit(-1);
     }
 
-    sem_id = semget(semKey, 18, IPC_CREAT | 0600);
+    sem_id = semget(semKey, 13, IPC_CREAT | 0600);
     if (sem_id < 0)
     {
         perror("Error while creating semaphore");
@@ -191,20 +197,14 @@ int main()
     set_env_var(SEM_ENV, strBuff);
 
     if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, PASSENGERS_QUEUE_SIZE) < 0 ||
-        semctl(sem_id, SEM_LOG, SETVAL, 1) < 0 ||
+        semctl(sem_id, SEM_LOG, SETVAL, 2) < 0 ||
         semctl(sem_id, SEM_GATE_START, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_TAKE_PASSENGERS, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_LEAVE_PORT, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_IPC_WAITING_ROOM, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_MAX_LUGGAGE_SHM, SETVAL, 1) < 0 ||
-        semctl(sem_id, SEM_FERRY_START, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_SHM_PASSENGERS, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_SHM_GENDER, SETVAL, 1) < 0 ||
-        semctl(sem_id, SEM_FERRY_LEFT, SETVAL, 0) < 0 ||
-        semctl(sem_id, SEM_FERRY_CAN_LEAVE, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_PEOPLE_AT_GANGWAY, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_QUEUE_FERRIES, SETVAL, 1) < 0 ||
-        semctl(sem_id, SEM_GATE_CLOSED, SETVAL, 1) < 0 ||
         semctl(sem_id, SEM_PASSENGER_CREATED, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_FERRY_MOVE_NEXT, SETVAL, 0) < 0 ||
         semctl(sem_id, SEM_ORCHESTRATOR_MOVE_NEXT, SETVAL, 0) < 0)
@@ -451,34 +451,23 @@ int main()
 
         kill(current_ferry, SIGSYS);
 
-        sem_p(SEM_FERRY_CAN_LEAVE);
+        sem_p(SEM_ORCHESTRATOR_MOVE_NEXT);
 
         custom_sleep_interruptable(FERRY_START_TAKING_PASSENGERS_TIME);
 
-        sem_v(SEM_TAKE_PASSENGERS);
+        sem_v(SEM_FERRY_MOVE_NEXT);
 
         custom_sleep_interruptable(FERRY_WAIT_FOR_PASSENGERS_TIME);
 
         sem_p(SEM_PEOPLE_AT_GANGWAY);
-        printf("a\n");
 
-        sem_v(SEM_LEAVE_PORT);
-
-        for (int i = 0; i < GATE_NUM; i++)
-        {
-            kill(gates[i], SIGSYS);
-        }
-
-        for (int i = 0; i < GATE_NUM; i++)
-        {
-            sem_p(SEM_GATE_CLOSED);
-        }
+        sem_v(SEM_FERRY_MOVE_NEXT);
 
         kill(current_ferry, SIGPIPE);
 
-        sem_v(SEM_FERRY_START);
-        
-        sem_p(SEM_FERRY_LEFT);
+        sem_v(SEM_FERRY_MOVE_NEXT);
+
+        sem_p(SEM_ORCHESTRATOR_MOVE_NEXT);
     }
 
     sigset_t mask;

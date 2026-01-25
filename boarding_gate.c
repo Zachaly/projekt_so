@@ -26,12 +26,6 @@ void sig_handler(int signum)
         take_passengers = false;
         stop = true;
     }
-    if (signum == SIGSYS)
-    {
-        take_passengers = false;
-        sem_v(SEM_GATE_START);
-        sem_v(SEM_FERRY_CAP);
-    }
 }
 
 void *take_passenger()
@@ -126,7 +120,7 @@ void *take_passenger()
     {
         sem_v(SEM_MAX_LUGGAGE_SHM);
 
-        sprintf(log_buff, "Passenger %d left the gate", passenger.pid);\
+        sprintf(log_buff, "Passenger %d left the gate", passenger.pid);
         log_info("GATE", log_buff);
         if (msgsnd(ipc_waiting_room, &passenger, sizeof(struct passenger) - sizeof(long int), 0) < 0)
         {
@@ -161,61 +155,23 @@ int main()
     pthread_mutex_init(&mutex, NULL);
 
     gate_passengers = init_queue();
+
+    sem_p(SEM_GATE_START);
     log_info("GATE", "Gate opened");
 
     while (!stop)
     {
-        sem_p(SEM_GATE_START);
-
-        current_gender = 0;
-        if (!take_passengers)
+        sem_p(SEM_SHM_GENDER);
+        if (*shm_gender_swap < 0)
         {
-            if (stop)
-            {
-                break;
-            }
-            sem_v(SEM_GATE_CLOSED);
-            take_passengers = true;
-            continue;
-        }
+            *shm_gender_swap = 3;
+            sem_v(SEM_SHM_GENDER);
 
-        while (take_passengers)
-        {
-            sem_p(SEM_SHM_GENDER);
-            if (*shm_gender_swap < 0)
-            {
-                *shm_gender_swap = 3;
-                sem_v(SEM_SHM_GENDER);
+            current_gender = 0;
 
-                current_gender = 0;
+            log_info("GATE", "Gate forced to change current gender");
 
-                log_info("GATE", "Gate forced to change current gender");
-
-                while (queue_size(gate_passengers) > 0)
-                {
-                    pthread_t id = dequeue(gate_passengers);
-                    if (pthread_join(id, NULL) < 0)
-                    {
-                        continue;
-                    }
-                    if (pthread_detach(id) < 0)
-                    {
-                        perror("GATE");
-                        exit(-1);
-                    }
-                }
-            }
-            else
-            {
-                sem_v(SEM_SHM_GENDER);
-            }
-
-            if (queue_size(gate_passengers) == 0)
-            {
-                current_gender = 0;
-            }
-
-            while (queue_size(gate_passengers) > 1)
+            while (queue_size(gate_passengers) > 0)
             {
                 pthread_t id = dequeue(gate_passengers);
                 if (pthread_join(id, NULL) < 0)
@@ -228,32 +184,47 @@ int main()
                     exit(-1);
                 }
             }
+            continue;
+        }
+        else
+        {
+            sem_v(SEM_SHM_GENDER);
+        }
 
-            sem_p(SEM_FERRY_CAP);
-            if (!take_passengers)
+        if (queue_size(gate_passengers) == 0)
+        {
+            current_gender = 0;
+        }
+
+        while (queue_size(gate_passengers) > 1)
+        {
+            pthread_t id = dequeue(gate_passengers);
+            if (pthread_join(id, NULL) < 0)
             {
                 continue;
             }
-
-            pthread_t id;
-            if (pthread_create(&id, NULL, take_passenger, NULL))
+            if (pthread_detach(id) < 0)
             {
                 perror("GATE");
                 exit(-1);
             }
-            enqueue(gate_passengers, id);
-
-            custom_sleep(1);
         }
 
-        sem_p(SEM_SHM_GENDER);
-        *shm_last_gender = 0;
-        *shm_gender_swap = 3;
-        sem_v(SEM_SHM_GENDER);
+        sem_p(SEM_FERRY_CAP);
+        if (stop)
+        {
+            break;
+        }
 
-        take_passengers = true;
+        pthread_t id;
+        if (pthread_create(&id, NULL, take_passenger, NULL))
+        {
+            perror("GATE");
+            exit(-1);
+        }
+        enqueue(gate_passengers, id);
 
-        sem_v(SEM_GATE_CLOSED);
+        custom_sleep(1);
     }
 
     while (queue_size(gate_passengers) > 1)
@@ -272,7 +243,6 @@ int main()
 
     free_queue(gate_passengers);
     log_info("GATE", "Gate closed");
-    pthread_mutex_destroy(&mutex);
 
     shmdt(&shm_max_luggage);
     shmdt(&shm_gender_swap);

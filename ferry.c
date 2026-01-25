@@ -74,6 +74,7 @@ void leave_port()
     }
 
     leave = true;
+    log_info("FERRY", "Ferry will leave the port");
 }
 
 void sig_handler(int signum)
@@ -206,9 +207,9 @@ int main()
                 exit(-1);
             }
         }
-        sem_v(SEM_FERRY_CAN_LEAVE);
+        sem_v(SEM_ORCHESTRATOR_MOVE_NEXT);
 
-        sem_p(SEM_TAKE_PASSENGERS);
+        sem_p(SEM_FERRY_MOVE_NEXT);
         log_info("FERRY", "Ferry started taking passengers");
 
         while (!leave)
@@ -238,8 +239,6 @@ int main()
             custom_sleep(2);
         }
 
-        log_info("FERRY", "Ferry will leave the port");
-
         while (queue_size(thread_ids) > 0)
         {
             pthread_t id = dequeue(thread_ids);
@@ -247,6 +246,7 @@ int main()
             int j_res = pthread_join(id, NULL);
             if (j_res != 0)
             {
+                perror("FERRY");
                 continue;
             }
 
@@ -257,38 +257,24 @@ int main()
             }
         }
 
-        sem_p(SEM_LEAVE_PORT);
+        sem_p(SEM_FERRY_MOVE_NEXT);
 
         if (ferry_passengers == 0)
         {
             log_info("FERRY", "Ferry didn't take off due to no passengers");
 
-            struct msqid_ds queue_data;
-            msgctl(ipc_passengers_id, IPC_STAT, &queue_data);
-
-            int count = queue_data.msg_qnum;
-
-            if (count == 0)
-            {
-                if (semctl(sem_id, SEM_IPC_PASSENGER_QUEUE, SETVAL, PASSENGERS_QUEUE_SIZE) < 0)
-                {
-                    perror("FERRY");
-                    exit(-1);
-                }
-            }
-
-            sem_p(SEM_FERRY_START);
+            sem_p(SEM_FERRY_MOVE_NEXT);
 
             kill(getppid(), SIGTERM);
 
             continue;
         }
 
-        sem_p(SEM_FERRY_START);
+        sem_p(SEM_FERRY_MOVE_NEXT);
 
         log_info("FERRY", "Ferry started course");
 
-        sem_v(SEM_FERRY_LEFT);
+        sem_v(SEM_ORCHESTRATOR_MOVE_NEXT);
 
         custom_sleep(course_time);
 

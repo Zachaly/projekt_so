@@ -33,11 +33,11 @@ void sem_p(int sem_num)
     buf.sem_op = -1;
     buf.sem_flg = 0;
 
-    while (semop(sem_id, &buf, 1) == -1)
+    if(semop(sem_id, &buf, 1) == -1)
     {
         if (errno == EINTR)
         {
-            continue;
+            sem_p(sem_num);
         }
         else
         {
@@ -88,7 +88,6 @@ void log_info(char *source, char *text)
     }
     sem_v(SEM_LOG);
 
-    
     if (close(file) != 0)
     {
         perror("Failed to close log file");
