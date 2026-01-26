@@ -77,10 +77,7 @@ int main()
     sigset_t mask;
     sigemptyset(&mask);
 
-    while (live)
-    {
-        sigsuspend(&mask);
-    }
+    while (live);
 
     shmdt(&shm_max_luggage);
 
