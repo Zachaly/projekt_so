@@ -127,6 +127,10 @@ void signal_handler(int signum, siginfo_t *info, void *context)
         custom_sleep_break = true;
         forced_ferry_leave = true;
     }
+    else if(signum == SIGSYS)
+    {
+        sem_v(SEM_ORCHESTRATOR_MOVE_NEXT);
+    }
 }
 
 void custom_sleep_interruptable(int seconds)
@@ -407,7 +411,7 @@ int main()
     sa.sa_flags = SA_SIGINFO;
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGPIPE, &sa, NULL);
+    sigaction(SIGSYS, &sa, NULL);
 
     while (1)
     {
@@ -458,8 +462,6 @@ int main()
         sem_p(SEM_PEOPLE_AT_GANGWAY);
 
         kill(current_ferry, SIGPIPE);
-
-        sem_v(SEM_FERRY_MOVE_NEXT);
 
         sem_p(SEM_ORCHESTRATOR_MOVE_NEXT);
     }

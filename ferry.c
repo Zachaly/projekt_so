@@ -259,26 +259,21 @@ int main()
             }
         }
 
-        sem_p(SEM_FERRY_MOVE_NEXT);
 
         if (ferry_passengers == 0)
         {
             log_info("FERRY", "Ferry didn't take off due to no passengers");
 
-            //sem_p(SEM_FERRY_MOVE_NEXT);
+            kill(getppid(), SIGSYS);
 
             kill(getppid(), SIGTERM);
-
-            sem_v(SEM_ORCHESTRATOR_MOVE_NEXT);
 
             continue;
         }
 
-        //sem_p(SEM_FERRY_MOVE_NEXT);
-
         log_info("FERRY", "Ferry started course");
 
-        sem_v(SEM_ORCHESTRATOR_MOVE_NEXT);
+        kill(getppid(), SIGSYS);
 
         custom_sleep(course_time);
 

@@ -91,7 +91,6 @@ void log_info(char *source, char *text)
     {
         perror("Error while writing to file");
     }
-    sem_v(SEM_LOG);
 
     if (close(file) != 0)
     {
@@ -99,6 +98,7 @@ void log_info(char *source, char *text)
     }
 
     printf("[%s][%s](%d): %s\n", time_buffer, source, getpid(), text);
+    sem_v(SEM_LOG);
 }
 
 int random_number(int min, int max)
