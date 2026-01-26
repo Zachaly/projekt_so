@@ -8,7 +8,6 @@
 Queue *available_ferries;
 bool custom_sleep_break = false;
 bool forced_ferry_leave = false;
-bool ferry_left = false;
 int current_ferry;
 int *passengers_left;
 char strBuff[200];
@@ -130,7 +129,7 @@ void signal_handler(int signum, siginfo_t *info, void *context)
     }
     else if(signum == SIGSYS)
     {
-        ferry_left = true;
+        sem_v(SEM_ORCHESTRATOR_MOVE_NEXT);
     }
 }
 
@@ -449,7 +448,6 @@ int main()
         current_ferry = dequeue(available_ferries);
         sem_v(SEM_QUEUE_FERRIES);
         forced_ferry_leave = false;
-        ferry_left = false;
 
         kill(current_ferry, SIGSYS);
 
@@ -465,13 +463,7 @@ int main()
 
         kill(current_ferry, SIGPIPE);
 
-        sigset_t mask;
-        sigemptyset(&mask);
-
-        while(!ferry_left)
-        {
-            sigsuspend(&mask);
-        }
+        sem_p(SEM_ORCHESTRATOR_MOVE_NEXT);
     }
 
     sigset_t mask;
