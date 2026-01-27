@@ -90,7 +90,11 @@ void *take_passenger()
         }
         pthread_mutex_lock(&mutex);
     }
-    
+    else
+    {
+        sem_v(SEM_SHM_GENDER);
+    }
+
     sem_p(SEM_SHM_GENDER);
     *shm_last_gender = passenger.mtype;
     sem_v(SEM_SHM_GENDER);
