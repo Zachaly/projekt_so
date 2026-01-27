@@ -75,6 +75,7 @@ void *take_passenger()
     sem_p(SEM_SHM_GENDER);
     if (current_gender != 0 && current_gender != passenger.mtype && queue_size(gate_passengers) > 0)
     {
+        sem_v(SEM_SHM_GENDER);
         pthread_mutex_unlock(&mutex);
         pthread_t id = dequeue(gate_passengers);
         if (pthread_join(id, NULL) < 0)
@@ -89,7 +90,8 @@ void *take_passenger()
         }
         pthread_mutex_lock(&mutex);
     }
-
+    
+    sem_p(SEM_SHM_GENDER);
     *shm_last_gender = passenger.mtype;
     sem_v(SEM_SHM_GENDER);
 
