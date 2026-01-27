@@ -37,6 +37,7 @@ int main()
 {
     load_sem_id();
     signal(SIGINT, readd_to_queue);
+    signal(SIGPIPE, readd_to_queue);
     signal(SIGTERM, readd_to_queue);
 
     srand(time(NULL));
@@ -73,9 +74,6 @@ int main()
         perror("PASSENGER");
         exit(-1);
     }
-
-    sigset_t mask;
-    sigemptyset(&mask);
 
     while (live);
 
