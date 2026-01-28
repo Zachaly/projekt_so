@@ -12,6 +12,12 @@ Queue *init_queue()
 {
 	Queue *queue = malloc(sizeof(Queue));
 
+	if(queue == NULL)
+	{
+		perror("Queue failure");
+		exit(-1);
+	}
+
 	queue->arr = NULL;
 	queue->tail = -1;
 	queue->element_size = sizeof(int);
@@ -22,6 +28,12 @@ Queue *init_queue()
 static void realloc_arr(Queue *queue)
 {
 	void *temp = realloc(queue->arr, queue->element_size * (queue->tail + 1));
+
+	if(temp == NULL)
+	{
+		perror("Queue failure");
+		return;
+	}
 
 	queue->arr = temp;
 }
@@ -61,7 +73,7 @@ int queue_size(Queue *queue)
 
 void free_queue(Queue *queue)
 {
-	if (queue)
+	if (!queue)
 	{
 		return;
 	}

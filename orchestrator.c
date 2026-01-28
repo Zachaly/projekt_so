@@ -41,7 +41,11 @@ void cleanup()
 
     for (int i = 0; i < GATE_NUM; i++)
     {
-        waitpid(gates[i], &s, 0);
+        if (waitpid(gates[i], &s, 0) < 0)
+        {
+            perror("ORCHESTRATOR");
+            continue;
+        }
     }
 
     printf("Gates deleted \n");
@@ -49,7 +53,11 @@ void cleanup()
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         kill(passenger_ids[i], SIGPIPE);
-        waitpid(passenger_ids[i], &s, 0);
+        if (waitpid(passenger_ids[i], &s, 0) < 0)
+        {
+            perror("ORCHESTRATOR");
+            continue;
+        }
     }
 
     printf("Passengers deleted \n");
@@ -57,7 +65,11 @@ void cleanup()
     for (int i = 0; i < FERRY_NUM; i++)
     {
         kill(ferry_ids[i], SIGTERM);
-        waitpid(ferry_ids[i], &s, 0);
+        if (waitpid(ferry_ids[i], &s, 0) < 0)
+        {
+            perror("ORCHESTRATOR");
+            continue;
+        }
     }
 
     printf("Ferries deleted\n");
@@ -74,7 +86,8 @@ void cleanup()
         exit(-1);
     }
 
-    if (shmctl(shm_gender_swap_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0 || shmctl(shm_gender_id, IPC_RMID, NULL) < 0 || shmctl(shm_last_gender_id, IPC_RMID, NULL) < 0)
+    if (shmctl(shm_gender_swap_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0 ||
+        shmctl(shm_gender_id, IPC_RMID, NULL) < 0 || shmctl(shm_last_gender_id, IPC_RMID, NULL) < 0)
     {
         perror("Failed to delete shm");
         exit(-1);
@@ -127,7 +140,7 @@ void signal_handler(int signum, siginfo_t *info, void *context)
         custom_sleep_break = true;
         forced_ferry_leave = true;
     }
-    else if(signum == SIGSYS)
+    else if (signum == SIGSYS)
     {
         sem_v(SEM_ORCHESTRATOR_MOVE_NEXT);
     }
@@ -154,7 +167,11 @@ void *wait_passengers()
 
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
-        waitpid(-1, &s, 0);
+        if (waitpid(-1, &s, 0) < 0)
+        {
+            perror("ORCHESTRATOR");
+            i--;
+        };
     }
 
     pthread_exit(0);
