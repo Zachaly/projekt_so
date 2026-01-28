@@ -163,8 +163,6 @@ void *wait_passengers()
 {
     int s;
 
-    int start = 0;
-
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         if (waitpid(-1, &s, 0) < 0)
