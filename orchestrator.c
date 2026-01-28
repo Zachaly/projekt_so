@@ -39,40 +39,15 @@ void cleanup()
         perror("Semaphore error");
     }
 
-    for (int i = 0; i < GATE_NUM; i++)
+    for (int i = 0; i < FERRY_NUM; i++)
     {
-        if (waitpid(gates[i], &s, 0) < 0)
-        {
-            perror("ORCHESTRATOR");
-            continue;
-        }
+        kill(ferry_ids[i], SIGTERM);
     }
-
-    printf("Gates deleted \n");
 
     for (int i = 0; i < PASSENGERS_NUMBER; i++)
     {
         kill(passenger_ids[i], SIGPIPE);
-        if (waitpid(passenger_ids[i], &s, 0) < 0)
-        {
-            perror("ORCHESTRATOR");
-            continue;
-        }
     }
-
-    printf("Passengers deleted \n");
-
-    for (int i = 0; i < FERRY_NUM; i++)
-    {
-        kill(ferry_ids[i], SIGTERM);
-        if (waitpid(ferry_ids[i], &s, 0) < 0)
-        {
-            perror("ORCHESTRATOR");
-            continue;
-        }
-    }
-
-    printf("Ferries deleted\n");
 
     if (pthread_join(passenger_thread, NULL) < 0)
     {
@@ -85,6 +60,13 @@ void cleanup()
         perror("ORCHESTRATOR");
         exit(-1);
     }
+
+    while (waitpid(-1, &s, 0) > 0)
+    {
+        continue;
+    }
+
+    printf("Child processes deleted \n");
 
     if (shmctl(shm_gender_swap_id, IPC_RMID, NULL) < 0 || shmctl(shm_passengers_id, IPC_RMID, NULL) < 0 ||
         shmctl(shm_gender_id, IPC_RMID, NULL) < 0 || shmctl(shm_last_gender_id, IPC_RMID, NULL) < 0)
